@@ -69,6 +69,7 @@ async function checkout(body: Record<string, unknown>) {
   const { data, error } = await db.rpc('create_online_booking', {
     p_room: body.room_id, p_check_in: body.check_in, p_check_out: body.check_out,
     p_email: body.email, p_guests: body.guests ?? null, p_message: body.message ?? '', p_mode: body.mode,
+    p_terms_accepted: body.terms_accepted === true,
   });
   if (error) return json({ error: error.message }, 400);
   const b = data[0];

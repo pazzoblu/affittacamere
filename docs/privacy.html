@@ -4,8 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Informativa privacy</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@600&display=swap">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -23,7 +21,7 @@
   <main class="wrap legal">
     <div id="config-msg"></div>
     <h1>Informativa sul trattamento dei dati personali</h1>
-    <p class="muted">ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR") · ultimo aggiornamento: 24 ottobre 2026 (rev. 2)</p>
+    <p class="muted">ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR") · ultimo aggiornamento: 24 ottobre 2026 (rev. 3)</p>
 
     <h2>1. Titolare del trattamento</h2>
     <p>Il titolare del trattamento è <strong data-p="titolare"></strong><span data-p="cf_piva" data-prefix=", C.F./P.IVA "></span><span data-p="indirizzo" data-prefix=", con sede in "></span>.</p>
@@ -35,7 +33,8 @@
         insieme ai dati del soggiorno (alloggio, date, numero di ospiti, importi e stato della prenotazione). Non chiediamo nome, telefono o indirizzo.</li>
       <li><strong>Messaggi</strong>: i messaggi che invii con la richiesta o dalla pagina "La mia prenotazione" (comprese le richieste di cancellazione)
         vengono notificati al personale che gestisce le prenotazioni e cancellati quando non servono più.</li>
-      <li><strong>Pagamenti online</strong>: importo, data ed esito del pagamento. I dati della carta o del conto li inserisci direttamente nella pagina sicura di Stripe: noi non li vediamo e non li conserviamo.</li>
+      <li><strong>Accettazione delle condizioni</strong>: data e versione dei Termini e condizioni e del Regolamento accettati al momento della prenotazione.</li>
+      <li data-if="pagamenti" hidden><strong>Pagamenti online</strong>: importo, data ed esito del pagamento. I dati della carta o del conto li inserisci direttamente nella pagina sicura di Stripe: noi non li vediamo e non li conserviamo.</li>
       <li><strong>Dati richiesti all'arrivo</strong>: i dati dei documenti di identità degli ospiti, raccolti in struttura e non tramite il sito, per gli obblighi di legge indicati al punto 3.</li>
       <li><strong>Dati tecnici di navigazione</strong>: come ogni sito, i server che lo ospitano registrano l'indirizzo IP e i dati tecnici delle richieste per sicurezza e funzionamento.</li>
     </ul>
@@ -67,16 +66,17 @@
     <p>I dati sono trattati da noi e, per conto nostro o in autonomia, dai seguenti fornitori:</p>
     <ul>
       <li><strong>Supabase Inc.</strong>: database e autenticazione dell'area riservata, con server nell'Unione Europea (Irlanda). Responsabile del trattamento.</li>
-      <li><strong>Stripe Payments Europe Ltd.</strong> (Irlanda): elaborazione dei pagamenti online, come titolare autonomo per i dati di pagamento. <a href="https://stripe.com/it/privacy" target="_blank" rel="noopener">Informativa di Stripe</a>.</li>
+      <li data-if="pagamenti" hidden><strong>Stripe Payments Europe Ltd.</strong> (Irlanda): elaborazione dei pagamenti online, come titolare autonomo per i dati di pagamento. <a href="https://stripe.com/it/privacy" target="_blank" rel="noopener">Informativa di Stripe</a>.</li>
       <li><strong>GitHub Inc.</strong>: hosting delle pagine del sito (dati tecnici di navigazione).</li>
-      <li><strong>Google LLC</strong>: fornitura dei caratteri tipografici (Google Fonts); il tuo browser li scarica dai server di Google, che ricevono il tuo indirizzo IP.</li>
       <li>Commercialista e consulenti, per gli adempimenti fiscali; Autorità competenti, quando previsto dalla legge.</li>
     </ul>
-    <p>Ai portali di prenotazione (es. Booking.com, Airbnb) il sito trasmette solo i giorni in cui l'alloggio è occupato, senza alcun dato degli ospiti.</p>
     <p>Alcuni fornitori hanno sede negli Stati Uniti: il trasferimento avviene sulla base del EU-US Data Privacy Framework o delle Clausole Contrattuali Standard approvate dalla Commissione Europea (art. 45-46 GDPR).</p>
 
     <h2>6. Cookie e memorizzazione nel browser</h2>
-    <p>Il sito non usa cookie di profilazione né strumenti di statistica o pubblicità. L'area riservata, usata solo dal gestore, salva nel browser i dati tecnici della sessione di accesso. La pagina di pagamento di Stripe usa i propri cookie tecnici e antifrode, descritti nell'informativa di Stripe.</p>
+    <p>Il sito non usa cookie di profilazione né strumenti di statistica o pubblicità, e i caratteri tipografici sono serviti
+      dal sito stesso, senza richieste a servizi esterni. L'area riservata, usata solo dal gestore, salva nel browser i dati tecnici
+      della sessione di accesso.<span data-if="pagamenti" hidden> La pagina di pagamento di Stripe usa i propri cookie tecnici e antifrode,
+      descritti nell'informativa di Stripe.</span></p>
 
     <h2>7. I tuoi diritti</h2>
     <p>Puoi chiedere in qualsiasi momento di accedere ai tuoi dati, correggerli, cancellarli, limitarne il trattamento, riceverli in formato portabile o opporti al trattamento basato sul legittimo interesse (artt. 15-22 GDPR), scrivendo ai contatti del punto 1. Alcuni dati non possono essere cancellati finché vige l'obbligo di legge di conservarli.</p>
@@ -88,10 +88,12 @@
   <footer>
     <div class="wrap">
       <span>© <span id="year"></span> <span data-c="titolo"></span></span>
-      <span class="links"><a href="privacy.html">Privacy</a><a href="admin/">Area riservata</a></span>
+      <span class="links"><a href="termini.html">Termini e condizioni</a><a href="regolamento.html">Regolamento</a><a href="privacy.html">Privacy</a><a href="admin/">Area riservata</a></span>
     </div>
+    <div class="wrap legal-line" id="legal-line"></div>
   </footer>
 
   <script type="module" src="js/privacy.js"></script>
+  <script type="module" src="js/footer.js"></script>
 </body>
 </html>

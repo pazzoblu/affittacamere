@@ -141,7 +141,7 @@ async function submitForm(e) {
   const out = document.getElementById('req-msg');
   if (!checkIn || !checkOut) return;
   const paying = e.submitter?.value === 'pay';
-  if (!f.email.reportValidity()) return;
+  if (!f.email.reportValidity() || !f.terms.reportValidity()) return;
   setButtons(false, false);
   msg(out, '');
 
@@ -150,6 +150,7 @@ async function submitForm(e) {
       body: {
         action: 'checkout', room_id: room.id, check_in: checkIn, check_out: checkOut,
         email: f.email.value, guests: Number(f.guests.value), message: f.message.value, mode: f.mode.value,
+        terms_accepted: f.terms.checked,
       },
     });
     if (error) {
@@ -165,6 +166,7 @@ async function submitForm(e) {
   const { data: code, error } = await sb.rpc('request_booking', {
     p_room: room.id, p_check_in: checkIn, p_check_out: checkOut,
     p_email: f.email.value, p_guests: Number(f.guests.value), p_message: f.message.value,
+    p_terms_accepted: f.terms.checked,
   });
   if (error) {
     msg(out, error.message, 'err');
@@ -202,6 +204,8 @@ async function init() {
     `<span>👤 fino a ${room.capacity} ${room.capacity === 1 ? 'ospite' : 'ospiti'}` +
     (room.min_nights > 1 ? ` · minimo ${room.min_nights} notti` : '') + '</span>' +
     (room.price_from != null ? `<span class="price">da <strong>${euro(room.price_from)}</strong>/notte</span>` : '');
+  document.getElementById('room-codes').textContent =
+    [room.cin && `CIN ${room.cin}`, room.cir && `CIR ${room.cir}`].filter(Boolean).join(' · ');
   document.getElementById('amenities').innerHTML = room.amenities.map(a => `<li>${esc(a)}</li>`).join('');
   document.getElementById('room-desc').innerHTML = paragraphs(room.description);
   document.getElementById('guests').innerHTML =

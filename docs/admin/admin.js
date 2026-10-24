@@ -208,7 +208,9 @@ function openBooking(b, defaults = {}) {
     'guests', 'price', 'amount_paid', 'notes']) {
     f[k].value = v[k] ?? '';
   }
-  $('bk-code').innerHTML = b ? `Codice prenotazione <strong class="code">${esc(b.code)}</strong>` : '';
+  $('bk-code').innerHTML = !b ? '' : `Codice prenotazione <strong class="code">${esc(b.code)}</strong>` +
+    (b.terms_accepted_at ? ` · termini accettati il ${new Date(b.terms_accepted_at).toLocaleString('it-IT',
+      { dateStyle: 'short', timeStyle: 'short' })} (versione ${esc(b.terms_version ?? '')})` : '');
   const cancelReq = b?.cancel_requested_at && b.status !== 'annullata';
   $('bk-cancel-req').hidden = !cancelReq;
   $('bk-cancel-req').textContent = cancelReq
@@ -454,6 +456,11 @@ async function renderRoomEditor(r) {
         </div>
         <label>Servizi (separati da virgola)<input name="amenities" value="${esc(r.amenities.join(', '))}"
           placeholder="Wi-Fi, Aria condizionata, Bagno privato, TV"></label>
+        <div class="grid2">
+          <label>CIN (Codice Identificativo Nazionale, obbligatorio negli annunci)<input name="cin" maxlength="40" value="${esc(r.cin ?? '')}"
+            placeholder="es. IT012345C2XXXXXXXX"></label>
+          <label>Codice regionale (CIR), se previsto<input name="cir" maxlength="40" value="${esc(r.cir ?? '')}"></label>
+        </div>
         <label><input type="checkbox" name="published" ${r.published ? 'checked' : ''}>Pubblicata sul sito</label>
       </fieldset>
       ${isNew ? '' : `<fieldset class="plain" ${editPrice ? '' : 'disabled'}>
@@ -509,6 +516,7 @@ async function renderRoomEditor(r) {
       capacity: Number(f.capacity.value),
       sort_order: Number(f.sort_order.value) || 0, published: f.published.checked,
       amenities: f.amenities.value.split(',').map(s => s.trim()).filter(Boolean),
+      cin: f.cin.value.trim().toUpperCase(), cir: f.cir.value.trim(),
     });
     if (editPrice) Object.assign(rec, {
       min_nights: Number(f.min_nights.value) || 1,
@@ -666,15 +674,27 @@ async function loadContentForm() {
   // testi del sito: ruolo "camere"; impostazioni dei pagamenti: ruolo "prezzi"
   $('content-texts').hidden = !can('camere');
   $('content-payments').hidden = !can('prezzi');
+  loadedContent = c;
 }
+
+// testi che fanno parte del contratto: se cambiano, cambia la versione registrata nelle prenotazioni
+const TERMS_KEYS = ['termini', 'regolamento', 'condizioni_cancellazione'];
+let loadedContent = {};
 
 $('content-form').addEventListener('submit', async e => {
   e.preventDefault();
   const rows = [...e.target.elements].filter(el => el.name && !el.closest('[hidden]')).map(el => ({
     key: el.name, value: el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value.trim(),
   }));
+  const termsChanged = rows.some(r => TERMS_KEYS.includes(r.key) && r.value !== (loadedContent[r.key] ?? '').trim());
+  if (termsChanged) {
+    const now = new Date();
+    rows.push({ key: 'termini_versione', value: `${isoDate(now)}T${now.toTimeString().slice(0, 5)}` });
+  }
   const { error } = await sb.from('site_content').upsert(rows);
-  msg($('content-msg'), error ? error.message : 'Salvato.', error ? 'err' : 'ok');
+  if (error) return msg($('content-msg'), error.message);
+  rows.forEach(r => { loadedContent[r.key] = r.value; });
+  msg($('content-msg'), termsChanged ? 'Salvato. Termini aggiornati: le nuove prenotazioni accetteranno questa versione.' : 'Salvato.', 'ok');
 });
 
 $('hero-file').onchange = async e => {

@@ -86,6 +86,9 @@ create table if not exists rooms (
 );
 alter table rooms add column if not exists price_weekend numeric(10,2);  -- notti di venerdì e sabato
 alter table rooms add column if not exists min_nights int not null default 1;
+-- Codice Identificativo Nazionale (obbligatorio negli annunci) ed eventuale codice regionale
+alter table rooms add column if not exists cin text not null default '';
+alter table rooms add column if not exists cir text not null default '';
 
 create table if not exists room_photos (
   id         uuid primary key default gen_random_uuid(),
@@ -130,7 +133,53 @@ insert into site_content(key, value) values
   ('hero_image',  ''),
   ('pagamenti_attivi',         '0'),
   ('acconto_percentuale',      '30'),
-  ('condizioni_cancellazione', 'Cancellazione gratuita fino a 7 giorni prima dell''arrivo. In seguito l''acconto non è rimborsabile.')
+  ('condizioni_cancellazione', 'Cancellazione gratuita fino a 7 giorni prima dell''arrivo. In seguito l''acconto non è rimborsabile.'),
+  ('titolare',  ''),
+  ('cf_piva',   ''),
+  -- data dell'ultima modifica di termini, regolamento o cancellazione: si registra in ogni prenotazione
+  ('termini_versione', '2026-10-24'),
+  -- testi modello: le parti tra [quadre] vanno completate dall'area riservata
+  ('termini', $txt$1. Oggetto
+La prenotazione riguarda la locazione turistica dell'alloggio scelto, per le date indicate, a uso esclusivamente abitativo e turistico. I dati del gestore sono indicati in fondo a ogni pagina del sito.
+
+2. Prezzo
+Il prezzo mostrato al momento della prenotazione è il totale del soggiorno e comprende [biancheria, pulizia finale, consumi di luce, acqua e gas]. Non comprende l'imposta di soggiorno, se prevista dal Comune, da pagare all'arrivo: [importo per persona a notte ed esenzioni].
+
+3. Prenotazione e pagamento
+La richiesta inviata dal sito diventa una prenotazione solo quando la confermiamo via email. Se paghi online, la prenotazione è confermata al momento del pagamento. L'eventuale saldo si paga [all'arrivo, in contanti o con carta].
+
+4. Arrivo e partenza
+Check-in dalle [15:00] alle [20:00], check-out entro le [10:00]. Gli arrivi fuori orario vanno concordati.
+
+5. Documenti
+All'arrivo ogni ospite deve presentare un documento d'identità valido: per legge comunichiamo le generalità degli ospiti alla Questura (Alloggiati Web) entro 24 ore. Senza documenti non possiamo consegnare l'alloggio.
+
+6. Numero di ospiti
+L'alloggio può essere occupato solo dalle persone indicate nella prenotazione, entro la capienza massima.
+
+7. Deposito cauzionale e danni
+[Eventuale deposito cauzionale di € ..., restituito alla partenza dopo la verifica dell'alloggio.] L'ospite risponde dei danni causati all'alloggio e agli arredi durante il soggiorno.
+
+8. Regolamento della casa
+Durante il soggiorno vale il Regolamento della casa, che fa parte di queste condizioni.
+
+9. Legge applicabile
+Si applica la legge italiana. Per le controversie con i consumatori è competente il foro del luogo di residenza del consumatore.$txt$),
+  ('regolamento', $txt$Nell'alloggio è vietato fumare [anche su balconi e terrazzi].
+
+Animali: [non ammessi / ammessi su richiesta].
+
+Non sono ammessi ospiti non indicati nella prenotazione, né feste o eventi.
+
+Rispetta il riposo dei vicini, in particolare dalle [22:00] alle [8:00].
+
+Fai la raccolta differenziata seguendo le indicazioni lasciate nell'alloggio.
+
+Alla partenza lascia le chiavi [nel punto concordato], chiudi porte, finestre e rubinetti e spegni luci e climatizzatore.
+
+Segnala subito eventuali guasti o danni.
+
+Il gestore entra nell'alloggio durante il soggiorno solo per urgenze, avvisando prima quando possibile.$txt$)
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------
@@ -186,6 +235,9 @@ create unique index if not exists bookings_code_uq on bookings(code);
 alter table bookings add column if not exists cancel_requested_at timestamptz;
 -- messaggio del cliente durante un pagamento online: passa nelle notifiche a pagamento concluso
 alter table bookings add column if not exists pending_message text;
+-- accettazione di termini e regolamento al momento della prenotazione dal sito (quando e quale versione)
+alter table bookings add column if not exists terms_accepted_at timestamptz;
+alter table bookings add column if not exists terms_version text;
 -- dalla versione precedente: nome e telefono del cliente non si conservano più
 alter table bookings drop column if exists guest_name;
 alter table bookings drop column if exists guest_phone;
@@ -377,19 +429,33 @@ $$;
 
 -- Richiesta di prenotazione dal sito: entra come "richiesta", la confermi tu.
 -- Restituisce il codice prenotazione da comunicare al cliente.
+-- Senza accettazione esplicita di termini e regolamento non si prenota; restituisce la versione accettata
+create or replace function accepted_terms_version(p_accepted boolean) returns text
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not coalesce(p_accepted, false) then
+    raise exception 'Per prenotare devi accettare i Termini e condizioni e il Regolamento della casa';
+  end if;
+  return coalesce((select value from site_content where key = 'termini_versione'), '');
+end;
+$$;
+
 drop function if exists request_booking(uuid, date, date, text, text, text, int, text);
+drop function if exists request_booking(uuid, date, date, text, int, text);
 create or replace function request_booking(
-  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text
+  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text, p_terms_accepted boolean
 ) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid;
   v_code text;
+  v_terms text := accepted_terms_version(p_terms_accepted);
 begin
   perform validate_site_booking(p_room, p_check_in, p_check_out, p_email, p_guests);
-  insert into bookings(room_id, check_in, check_out, status, source, price, guest_email, guests)
+  insert into bookings(room_id, check_in, check_out, status, source, price, guest_email, guests,
+                       terms_accepted_at, terms_version)
   values (p_room, p_check_in, p_check_out, 'richiesta', 'sito', quote_price(p_room, p_check_in, p_check_out),
-          lower(left(trim(p_email), 200)), p_guests)
+          lower(left(trim(p_email), 200)), p_guests, now(), v_terms)
   returning id, code into v_id, v_code;
   perform notify_staff(v_id, 'richiesta', p_message);
   return v_code;
@@ -479,8 +545,10 @@ $$;
 
 -- Prenotazione online: blocca le date per 35 minuti in attesa del pagamento
 drop function if exists create_online_booking(uuid, date, date, text, text, text, int, text, text);
+drop function if exists create_online_booking(uuid, date, date, text, int, text, text);
 create or replace function create_online_booking(
-  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text, p_mode text
+  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text, p_mode text,
+  p_terms_accepted boolean
 ) returns table(booking_id uuid, code text, room_name text, total numeric, amount numeric)
 language plpgsql security definer set search_path = public as $$
 declare
@@ -488,6 +556,7 @@ declare
   v_id uuid;
   v_code text;
   v_amount numeric;
+  v_terms text := accepted_terms_version(p_terms_accepted);
 begin
   if p_mode not in ('acconto', 'totale') then
     raise exception 'Modalità di pagamento non valida';
@@ -500,9 +569,10 @@ begin
   v_amount := case when p_mode = 'totale' then v_quote.total else v_quote.deposit end;
 
   insert into bookings(room_id, check_in, check_out, status, source, price, payment_status, expires_at,
-                       guest_email, guests, pending_message)
+                       guest_email, guests, pending_message, terms_accepted_at, terms_version)
   values (p_room, p_check_in, p_check_out, 'richiesta', 'sito', v_quote.total, 'in_attesa', now() + interval '35 minutes',
-          lower(left(trim(p_email), 200)), p_guests, nullif(left(coalesce(trim(p_message), ''), 2000), ''))
+          lower(left(trim(p_email), 200)), p_guests, nullif(left(coalesce(trim(p_message), ''), 2000), ''),
+          now(), v_terms)
   returning id, bookings.code into v_id, v_code;
 
   return query select v_id, v_code, (select name from rooms where id = p_room), v_quote.total, v_amount;
@@ -573,12 +643,13 @@ revoke execute on function room_is_free(uuid, date, date, uuid) from public, ano
 revoke execute on function validate_site_booking(uuid, date, date, text, int) from public, anon, authenticated;
 revoke execute on function notify_staff(uuid, text, text) from public, anon, authenticated;
 revoke execute on function guest_booking_id(text, text) from public, anon, authenticated;
-revoke execute on function create_online_booking(uuid, date, date, text, int, text, text) from public, anon, authenticated;
+revoke execute on function create_online_booking(uuid, date, date, text, int, text, text, boolean) from public, anon, authenticated;
+revoke execute on function accepted_terms_version(boolean) from public, anon, authenticated;
 revoke execute on function register_payment(text, text) from public, anon, authenticated;
 revoke execute on function expire_payment(text) from public, anon, authenticated;
 grant execute on function room_busy_ranges(uuid, date, date) to anon, authenticated;
 grant execute on function quote_booking(uuid, date, date) to anon, authenticated;
-grant execute on function request_booking(uuid, date, date, text, int, text) to anon, authenticated;
+grant execute on function request_booking(uuid, date, date, text, int, text, boolean) to anon, authenticated;
 grant execute on function booking_public_status(uuid) to anon, authenticated;
 grant execute on function booking_lookup(text, text) to anon, authenticated;
 grant execute on function request_cancellation(text, text, text) to anon, authenticated;
@@ -607,8 +678,8 @@ begin
        and not has_role('prezzi') then
       raise exception 'Non hai i permessi per modificare i prezzi';
     end if;
-    if (new.slug, new.name, new.short_description, new.description, new.capacity, new.amenities, new.sort_order, new.published)
-       is distinct from (old.slug, old.name, old.short_description, old.description, old.capacity, old.amenities, old.sort_order, old.published)
+    if (new.slug, new.name, new.short_description, new.description, new.capacity, new.amenities, new.sort_order, new.published, new.cin, new.cir)
+       is distinct from (old.slug, old.name, old.short_description, old.description, old.capacity, old.amenities, old.sort_order, old.published, old.cin, old.cir)
        and not has_role('camere') then
       raise exception 'Non hai i permessi per modificare i dati dell''alloggio';
     end if;
@@ -678,9 +749,12 @@ create policy seasons_write on season_prices for all using (has_role('prezzi')) 
 drop policy if exists content_public_read on site_content;
 create policy content_public_read on site_content for select using (true);
 drop policy if exists content_write on site_content;
+-- la versione dei termini cambia sia con i testi (Alloggi) sia con la cancellazione (Prezzi)
 create policy content_write on site_content for all
-  using (case when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end)
-  with check (case when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end);
+  using (case when key = 'termini_versione' then has_role('camere') or has_role('prezzi')
+              when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end)
+  with check (case when key = 'termini_versione' then has_role('camere') or has_role('prezzi')
+                   when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end);
 
 drop policy if exists ical_all on ical_sources;
 create policy ical_all on ical_sources for all using (has_role('prenotazioni')) with check (has_role('prenotazioni'));
@@ -703,7 +777,7 @@ create policy notifications_delete on notifications for delete using (has_role('
 
 -- Il token iCal non deve essere leggibile dalla vetrina
 revoke select on rooms from anon;
-grant select (id, slug, name, short_description, description, capacity, price_from, price_weekend,
+grant select (id, slug, name, short_description, description, capacity, price_from, price_weekend, cin, cir,
               min_nights, amenities, sort_order, published, created_at) on rooms to anon;
 
 -- ---------------------------------------------------------------------

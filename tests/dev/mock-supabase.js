@@ -2,7 +2,7 @@
 // Lo usa solo tests/dev/server.mjs: non viene mai pubblicato.
 // Login demo: qualsiasi password; l'email sceglie l'utente (admin@, camere@, prenotazioni@, prezzi@demo.test).
 
-const KEY = 'affittacamere-demo-db-v3';
+const KEY = 'affittacamere-demo-db-v4';
 const iso = d => d.toISOString().slice(0, 10);
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 const uuid = () => crypto.randomUUID();
@@ -39,11 +39,14 @@ function seed() {
       ['whatsapp', '+39 333 0000000'], ['hero_image', ''], ['titolare', 'Mario Demo'], ['cf_piva', 'DMEMRA80A01G273X'],
       ['pagamenti_attivi', '1'], ['acconto_percentuale', '30'],
       ['condizioni_cancellazione', "Cancellazione gratuita fino a 7 giorni prima dell'arrivo."],
+      ['termini_versione', '2026-10-24'],
+      ['termini', "1. Oggetto\nLa prenotazione riguarda la locazione turistica dell'alloggio.\n\n2. Prezzo\nIl prezzo comprende [biancheria e pulizia finale]."],
+      ['regolamento', 'Vietato fumare.\n\nNiente feste o eventi.'],
     ].map(([key, value]) => ({ key, value })),
     rooms: [
       { id: r1, slug: 'camera-blu', name: 'Camera Blu', short_description: 'Matrimoniale con balcone vista mare',
         description: 'Ampia camera matrimoniale.\n\nBagno privato con doccia.', capacity: 2, price_from: 70,
-        price_weekend: 90, min_nights: 1, amenities: ['Wi-Fi', 'Aria condizionata', 'Balcone'], sort_order: 0, published: true, ical_token: uuid() },
+        price_weekend: 90, min_nights: 1, cin: 'IT082053C2DEMO0001', cir: '19082053C200001', amenities: ['Wi-Fi', 'Aria condizionata', 'Balcone'], sort_order: 0, published: true, ical_token: uuid() },
       { id: r2, slug: 'camera-verde', name: 'Camera Verde', short_description: 'Tripla luminosa',
         description: 'Camera tripla.', capacity: 3, price_from: 85, price_weekend: null, min_nights: 2, amenities: ['Wi-Fi', 'TV'],
         sort_order: 1, published: true, ical_token: uuid() },
@@ -211,10 +214,12 @@ export function createClient() {
         return { data: b ? [withRoom(b)] : [], error: null };
       }
       if (fn === 'request_booking') {
+        if (!a.p_terms_accepted) return fail('Per prenotare devi accettare i Termini e condizioni e il Regolamento della casa');
         const b = { id: uuid(), code: code(), room_id: a.p_room, check_in: a.p_check_in, check_out: a.p_check_out,
           status: 'richiesta', source: 'sito', guest_email: a.p_email.trim().toLowerCase(), guests: a.p_guests,
           notes: '', price: quotePrice(a.p_room, a.p_check_in, a.p_check_out), amount_paid: 0, payment_status: 'nessuno',
-          ical_source_id: null, external_uid: null, cancel_requested_at: null, created_at: now() };
+          ical_source_id: null, external_uid: null, cancel_requested_at: null, created_at: now(),
+          terms_accepted_at: now(), terms_version: content('termini_versione') };
         db.bookings.push(b);
         notify(b.id, 'richiesta', a.p_message);
         save();

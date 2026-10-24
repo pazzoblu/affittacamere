@@ -1,3 +1,11 @@
+/* Font serviti dal sito stesso (vedi fonts/LEGGIMI.txt) */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/inter-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/inter-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Playfair Display'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/playfair-display-latin-600-normal.woff2') format('woff2'); }
+
 :root {
   --bg: #faf7f2;
   --surface: #ffffff;
@@ -185,7 +193,13 @@ textarea { min-height: 80px; resize: vertical; }
 .legal-table th { background: var(--surface); }
 .legal mark { background: #fff4e5; padding: 0 4px; border-radius: 4px; }
 .privacy-note { font-size: .8rem; color: var(--muted); margin: 10px 0 0; }
-footer .links { display: flex; gap: 16px; }
+footer .links { display: flex; gap: 16px; flex-wrap: wrap; }
+footer .legal-line { font-size: .8rem; margin-top: 10px; display: block; }
+footer .legal-line:empty { display: none; }
+footer .legal-line .sep { opacity: .5; }
+.terms-check { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: .88rem; margin: 6px 0 12px; }
+.terms-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
+.room-codes { font-size: .85rem; color: var(--muted); margin-top: 6px; }
 
 @media (max-width: 860px) {
   .room-layout { grid-template-columns: 1fr; }

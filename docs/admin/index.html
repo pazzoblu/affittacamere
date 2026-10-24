@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Gestione casa vacanze</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <link rel="stylesheet" href="admin.css">
   <!-- tipo di link email (invite / recovery), letto prima che Supabase ripulisca l'indirizzo -->
   <script>window.__authLinkType = (location.hash.match(/[#&]type=(\w+)/) || [])[1] || '';</script>
@@ -148,6 +146,15 @@
           <label>Immagine di copertina</label>
           <div class="hero-preview" id="hero-preview"></div>
           <input type="file" id="hero-file" accept="image/*">
+
+          <h2 style="margin-top:28px">Termini e regolamento</h2>
+          <p class="muted small">Completa le parti tra [quadre]. Ogni modifica aggiorna la data di versione, che viene
+            registrata nelle nuove prenotazioni insieme all'accettazione del cliente.
+            Pagine: <a href="../termini.html" target="_blank">Termini e condizioni</a> ·
+            <a href="../regolamento.html" target="_blank">Regolamento</a>.</p>
+          <label>Termini e condizioni (le condizioni di cancellazione e la clausola sul recesso si aggiungono da sole)
+            <textarea name="termini" rows="14"></textarea></label>
+          <label>Regolamento della casa<textarea name="regolamento" rows="10"></textarea></label>
           </div>
 
           <div id="content-payments">

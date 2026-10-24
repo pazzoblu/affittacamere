@@ -5,6 +5,8 @@ document.getElementById('year').textContent = new Date().getFullYear();
 // I dati del titolare arrivano da "Sito e pagamenti" nell'area riservata
 function fill(c) {
   document.querySelectorAll('[data-c]').forEach(el => { el.textContent = c[el.dataset.c] || ''; });
+  // le parti su Stripe compaiono solo se i pagamenti online sono attivi
+  document.querySelectorAll('[data-if="pagamenti"]').forEach(el => { el.hidden = c.pagamenti_attivi !== '1'; });
   const values = { ...c, titolare: c.titolare || c.titolo };
   document.querySelectorAll('[data-p]').forEach(el => {
     const v = values[el.dataset.p];

@@ -16,6 +16,9 @@ docs/                 sito pubblicato
   pagamento.html      esito del pagamento
   prenotazione.html   "La mia prenotazione": stato, messaggi e richiesta di cancellazione con codice + email
   privacy.html        informativa privacy (GDPR)
+  termini.html        termini e condizioni (testo modificabile + cancellazione + clausola sul recesso)
+  regolamento.html    regolamento della casa (testo modificabile)
+  fonts/              caratteri serviti dal sito (nessuna richiesta a Google Fonts)
   admin/              area riservata (login Supabase)
   js/config.js        URL e chiave del progetto Supabase  ← da compilare
 supabase/
@@ -146,6 +149,9 @@ presa all'ultimo minuto può ancora sovrapporsi. Il calendario admin evidenzia i
   I permessi sono imposti dal database (policy RLS e trigger), non solo nascosti nell'interfaccia.
 - **Clienti**: nessun account. Ricevono un codice prenotazione e, con codice + email, nella pagina
   *La mia prenotazione* vedono lo stato, scrivono alla struttura e possono chiedere la cancellazione.
+- **Aspetti legali**: ogni alloggio ha CIN ed eventuale CIR (scheda Alloggi), mostrati nella sua pagina e in fondo al sito
+  insieme al gestore. Prenotare richiede di spuntare l'accettazione di Termini e Regolamento; nella prenotazione si salvano
+  data e versione accettata (la versione cambia ogni volta che si modificano termini, regolamento o cancellazione).
 - **Notifiche**: richieste, pagamenti, cancellazioni e messaggi arrivano nella scheda *Messaggi* (admin e ruolo
   Prenotazioni). Le notifiche via email richiederanno un servizio di invio (es. Resend) da collegare in seguito.
 
@@ -165,6 +171,12 @@ presa all'ultimo minuto può ancora sovrapporsi. Il calendario admin evidenzia i
 
 ```bash
 node --test "tests/*.test.ts"
+```
+
+Controllo della sintassi dei file JavaScript del sito (`node --check` da solo non basta per i moduli con `import`):
+
+```bash
+for f in docs/js/*.js docs/admin/*.js; do node --input-type=module --check < "$f" || echo "ERRORE in $f"; done
 ```
 
 ## Da valutare in seguito

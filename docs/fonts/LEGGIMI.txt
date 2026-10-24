@@ -1,0 +1,5 @@
+Font usati dal sito, serviti localmente (nessuna richiesta a Google Fonts):
+- Inter 400 e 600 (latin)
+- Playfair Display 600 (latin)
+Fonte: pacchetti @fontsource 5.0.18 (https://fontsource.org).
+Licenza: SIL Open Font License 1.1 (https://openfontlicense.org), uso e ridistribuzione liberi.

@@ -6,7 +6,7 @@ export const sb = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : n
 
 // Colonne alloggio leggibili dalla vetrina (il token iCal resta privato)
 export const ROOM_PUBLIC_COLS =
-  'id, slug, name, short_description, description, capacity, price_from, price_weekend, min_nights, amenities, sort_order, published';
+  'id, slug, name, short_description, description, capacity, price_from, price_weekend, min_nights, amenities, sort_order, published, cin, cir';
 
 // Messaggio leggibile da un errore di sb.functions.invoke (il corpo JSON contiene { error })
 export async function functionError(error) {
