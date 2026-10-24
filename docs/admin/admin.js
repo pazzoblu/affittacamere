@@ -766,6 +766,46 @@ $('login-form').addEventListener('submit', async e => {
   if (error) msg($('login-msg'), error.message === 'Invalid login credentials' ? 'Email o password errati.' : error.message);
 });
 
+// ---------------------------------------------------------------------
+// Password: cambio dall'area riservata e recupero via email
+// ---------------------------------------------------------------------
+const PW_ERRORS = {
+  same_password: 'La nuova password deve essere diversa da quella attuale.',
+  weak_password: 'Password troppo debole: usa almeno 8 caratteri, con lettere e numeri.',
+  over_email_send_rate_limit: 'Troppe email inviate di recente: riprova tra un\'ora.',
+};
+
+function openPasswordDialog(recovery) {
+  $('pw-form').reset();
+  msg($('pw-msg'), '');
+  $('pw-title').textContent = recovery ? 'Scegli una nuova password' : 'Cambia password';
+  $('pw-hint').textContent = recovery
+    ? 'Hai aperto il link di recupero: imposta la nuova password per entrare.'
+    : 'Scegli una password di almeno 8 caratteri.';
+  $('pw-dialog').showModal();
+}
+
+$('change-pw').onclick = () => openPasswordDialog(false);
+$('pw-cancel').onclick = () => $('pw-dialog').close();
+
+$('pw-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.password.value !== f.confirm.value) return msg($('pw-msg'), 'Le due password non coincidono.');
+  const { error } = await sb.auth.updateUser({ password: f.password.value });
+  if (error) return msg($('pw-msg'), PW_ERRORS[error.code] ?? error.message);
+  msg($('pw-msg'), 'Password aggiornata.', 'ok');
+  setTimeout(() => $('pw-dialog').close(), 1200);
+});
+
+$('forgot').onclick = async () => {
+  const email = $('login-form').email.value.trim();
+  if (!email) return msg($('login-msg'), 'Scrivi la tua email qui sopra, poi clicca di nuovo "Password dimenticata?".');
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) return msg($('login-msg'), PW_ERRORS[error.code] ?? error.message);
+  msg($('login-msg'), 'Se l\'email è registrata, a breve riceverai un link per scegliere una nuova password.', 'ok');
+};
+
 let started = false;
 async function onSession(session) {
   if (!session) { started = false; showView('login-view'); return; }
@@ -794,5 +834,14 @@ if (!configured) {
     <p>Inserisci URL e chiave del progetto Supabase in <code>js/config.js</code> (vedi README).</p>`;
   showView('msg-view');
 } else {
-  sb.auth.onAuthStateChange((_event, session) => { setTimeout(() => onSession(session).catch(showError), 0); });
+  sb.auth.onAuthStateChange((event, session) => {
+    setTimeout(() => {
+      onSession(session).catch(showError);
+      if (event === 'PASSWORD_RECOVERY') {
+        // toglie il token dalla barra degli indirizzi e chiede subito la nuova password
+        history.replaceState(null, '', location.pathname);
+        openPasswordDialog(true);
+      }
+    }, 0);
+  });
 }

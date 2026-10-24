@@ -167,6 +167,9 @@ code { background: #f1ece6; padding: 1px 5px; border-radius: 4px; font-size: .88
 .season-add { display: grid; grid-template-columns: 1.4fr 1fr 1fr .8fr .8fr auto; gap: 8px; align-items: end; }
 .season-add label { margin: 0; }
 
+#pw-dialog { width: min(420px, calc(100vw - 24px)); }
+.login .small .link { font-size: inherit; }
+
 dialog { border: 0; border-radius: 12px; padding: 22px; width: min(640px, calc(100vw - 24px)); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
 dialog::backdrop { background: rgba(30, 20, 10, .45); }
 

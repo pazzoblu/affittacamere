@@ -174,6 +174,9 @@ export function createClient() {
         emit();
         return { error: null };
       },
+      updateUser: async ({ password }) => (password === 'uguale123'
+        ? { error: { code: 'same_password', message: 'same' } } : { data: {}, error: null }),
+      resetPasswordForEmail: async () => ({ data: {}, error: null }),
       signOut: async () => { session = null; sessionStorage.removeItem('demo-session'); emit(); },
     },
     storage: {

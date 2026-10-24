@@ -17,6 +17,7 @@
       <label>Email<input name="email" type="email" required autocomplete="username"></label>
       <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
       <button class="btn" type="submit">Accedi</button>
+      <p class="small"><button type="button" class="link" id="forgot">Password dimenticata?</button></p>
       <div id="login-msg"></div>
       <p class="small"><a href="../">← Torna al sito</a></p>
     </form>
@@ -37,6 +38,7 @@
       </nav>
       <div class="right">
         <a href="../" target="_blank">Vedi sito ↗</a>
+        <button class="link" id="change-pw">Cambia password</button>
         <button class="link" id="logout">Esci</button>
       </div>
     </header>
@@ -192,6 +194,22 @@
         <span class="spacer"></span>
         <button type="button" class="btn ghost" id="bk-cancel">Chiudi</button>
         <button type="submit" class="btn" value="save">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dialog password (cambio dall'area riservata o dopo il link di recupero) -->
+  <dialog id="pw-dialog">
+    <form id="pw-form" class="pw-form">
+      <h2 id="pw-title">Cambia password</h2>
+      <p class="muted small" id="pw-hint">Scegli una password di almeno 8 caratteri.</p>
+      <label>Nuova password<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+      <label>Ripeti la nuova password<input name="confirm" type="password" minlength="8" required autocomplete="new-password"></label>
+      <div id="pw-msg"></div>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" id="pw-cancel">Annulla</button>
+        <button type="submit" class="btn">Salva password</button>
       </div>
     </form>
   </dialog>
