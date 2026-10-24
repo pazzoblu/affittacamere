@@ -1,6 +1,7 @@
 // Gestione degli utenti dell'area riservata, solo per gli amministratori.
-// Azioni: list, create (con password o con invito via email), update (nome e ruoli),
-// send_link (rimanda invito o link per la password), set_password, delete.
+// Azioni: list, create (con password o con link di attivazione), update (nome e ruoli),
+// new_link (nuovo link per scegliere la password), set_password, delete.
+// I link non vengono spediti da Supabase: li mostra l'area riservata e l'admin li inoltra.
 // Il database impedisce comunque di togliere l'ultimo amministratore.
 // File autosufficiente: si può pubblicare anche dall'editor della Dashboard Supabase.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
@@ -58,7 +59,7 @@ async function list() {
     name: byId.get(u.id)?.name ?? '',
     roles: byId.get(u.id)?.roles ?? [],
     staff: byId.has(u.id),
-    // invitato via email ma non ha ancora scelto la password
+    // ha ricevuto il link di attivazione ma non ha ancora scelto la password
     pending: !u.email_confirmed_at,
     last_sign_in_at: u.last_sign_in_at,
     created_at: u.created_at,
@@ -71,12 +72,15 @@ function redirectTo(body: Record<string, unknown>): string | undefined {
   return /^https?:\/\//.test(url) ? url : undefined;
 }
 
-function emailError(message: string): string {
-  if (/rate limit/i.test(message)) return 'Troppe email inviate di recente: riprova più tardi o imposta un server SMTP in Supabase';
-  return 'Email non inviata: ' + message;
+// Link da inoltrare all'utente (WhatsApp, email...): Supabase non invia nulla, quindi non serve un server SMTP.
+// "invite" crea anche l'utente; "recovery" serve per chi esiste già.
+async function actionLink(type: 'invite' | 'recovery', email: string, body: Record<string, unknown>) {
+  const { data, error } = await db.auth.admin.generateLink({ type, email, options: { redirectTo: redirectTo(body) } });
+  if (error) throw error;
+  return { userId: data.user.id, link: data.properties.action_link };
 }
 
-// senza password: Supabase invia un invito e l'utente sceglie la password dal link
+// senza password: si genera il link di attivazione con cui l'utente sceglie la password
 async function create(body: Record<string, unknown>) {
   const email = String(body.email ?? '').trim().toLowerCase();
   const password = String(body.password ?? '');
@@ -86,30 +90,38 @@ async function create(body: Record<string, unknown>) {
   if (password && password.length < 8) return json({ error: 'La password deve avere almeno 8 caratteri' }, 400);
   if (!roles.length) return json({ error: 'Scegli almeno un ruolo' }, 400);
 
-  const { data, error } = password
-    ? await db.auth.admin.createUser({ email, password, email_confirm: true })
-    : await db.auth.admin.inviteUserByEmail(email, { redirectTo: redirectTo(body) });
-  if (error) {
-    if (/already/i.test(error.message)) return json({ error: 'Esiste già un utente con questa email' }, 400);
-    return json({ error: password ? error.message : emailError(error.message) }, 400);
+  let userId: string;
+  let link: string | undefined;
+  try {
+    if (password) {
+      const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+      if (error) throw error;
+      userId = data.user.id;
+    } else {
+      ({ userId, link } = await actionLink('invite', email, body));
+    }
+  } catch (e) {
+    const message = (e as Error).message;
+    return json({ error: /already/i.test(message) ? 'Esiste già un utente con questa email' : message }, 400);
   }
-  const { error: staffErr } = await db.from('staff').insert({ user_id: data.user.id, email, name, roles });
+  const { error: staffErr } = await db.from('staff').insert({ user_id: userId, email, name, roles });
   if (staffErr) {
-    await db.auth.admin.deleteUser(data.user.id);
+    await db.auth.admin.deleteUser(userId);
     return json({ error: staffErr.message }, 500);
   }
-  return json({ id: data.user.id, invited: !password });
+  return json({ id: userId, link });
 }
 
-// rimanda il link: nuovo invito se non ha mai scelto la password, altrimenti link di reimpostazione
-async function sendLink(body: Record<string, unknown>) {
+// nuovo link per scegliere la password (anche per chi non ha mai usato il link di attivazione)
+async function newLink(body: Record<string, unknown>) {
   const { data: u, error: uErr } = await db.auth.admin.getUserById(String(body.user_id ?? ''));
   if (uErr || !u.user?.email) return json({ error: 'Utente non trovato' }, 404);
-  const { error } = u.user.email_confirmed_at
-    ? await db.auth.resetPasswordForEmail(u.user.email, { redirectTo: redirectTo(body) })
-    : await db.auth.admin.inviteUserByEmail(u.user.email, { redirectTo: redirectTo(body) });
-  if (error) return json({ error: emailError(error.message) }, 400);
-  return json({ ok: true, invited: !u.user.email_confirmed_at });
+  try {
+    const { link } = await actionLink('recovery', u.user.email, body);
+    return json({ link });
+  } catch (e) {
+    return json({ error: (e as Error).message }, 400);
+  }
 }
 
 // nome e ruoli; crea il profilo anche per utenti nati fuori dall'area riservata (es. dalla Dashboard)
@@ -157,7 +169,7 @@ Deno.serve(async req => {
       case 'list': return json({ users: await list() });
       case 'create': return await create(body);
       case 'update': return await update(body);
-      case 'send_link': return await sendLink(body);
+      case 'new_link': return await newLink(body);
       case 'set_password': return await setPassword(body);
       case 'delete': return await remove(body, me);
       default: return json({ error: 'Azione sconosciuta' }, 400);

@@ -157,6 +157,7 @@ code { background: #f1ece6; padding: 1px 5px; border-radius: 4px; font-size: .88
 .pay-link-row label { margin: 0; flex: 1; }
 .link-box { background: #faf8f5; border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 10px; font-size: .88rem; }
 .link-box .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.link-box code { display: block; margin: 6px 0; padding: 6px 8px; }
 .paid { font-size: .8rem; white-space: nowrap; }
 .paid.pagato { color: var(--ok); font-weight: 600; }
 .paid.acconto { color: #b26b00; font-weight: 600; }

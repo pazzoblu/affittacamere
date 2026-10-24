@@ -64,8 +64,12 @@ I dati demo restano nel browser; per ripartire da zero svuota il localStorage de
    In alternativa: Dashboard → **Edge Functions → Deploy a new function → Via editor**, nome `users`,
    incolla `supabase/functions/users/index.ts` e disattiva *Verify JWT* (la funzione controlla da sola che chi chiama sia admin).
 7. **Authentication → URL Configuration → Redirect URLs**: aggiungi `https://TUO-SITO/admin/**` (es. `https://pazzoblu.github.io/affittacamere/**`),
-   così i link delle email (invito di un nuovo utente, password dimenticata) riportano all area riservata.
-   Per inviare email a persone fuori dal tuo team Supabase serve un server SMTP (**Authentication → Emails → SMTP Settings**).
+   così i link di attivazione dei nuovi utenti e di "password dimenticata" riportano all'area riservata.
+
+**Nuovi utenti**: nella scheda Utenti si crea l'utente con una password oppure, lasciandola vuota, si ottiene un
+**link di attivazione** da inoltrare (WhatsApp, email): aprendolo l'utente sceglie la sua password. Il link lo genera
+Supabase senza spedire email, quindi non serve un server SMTP. "Password dimenticata?" invece manda un'email:
+senza SMTP Supabase consegna solo agli indirizzi del team del progetto (in alternativa l'admin crea un nuovo link dall'elenco utenti).
 
 **Aggiornare un progetto esistente**: riesegui `supabase/schema.sql` nel SQL Editor. È rieseguibile e porta
 le modifiche (dalla versione con la tabella `admins`: gli admin diventano utenti con ruolo Amministratore,

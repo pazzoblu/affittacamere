@@ -896,14 +896,14 @@ async function renderUsers() {
     <tbody>${users.map(u => `<tr>
       <td>${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
         ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}
-        ${u.pending ? '<br><span class="paid in_attesa">invito inviato: deve ancora scegliere la password</span>' : ''}</td>
+        ${u.pending ? '<br><span class="paid in_attesa">non ha ancora attivato l\'accesso</span>' : ''}</td>
       <td>${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
         : '<span class="muted small">nessun ruolo: non può entrare</span>'}</td>
       <td class="small">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
       <td class="act">
         <button class="btn small ghost" data-user="edit" data-id="${u.id}">Ruoli</button>
         ${u.id === me.id ? '' : `<button class="btn small ghost" data-user="link" data-id="${u.id}"
-          title="${u.pending ? 'Rimanda l\'email di invito' : 'Manda un\'email per scegliere una nuova password'}">${u.pending ? 'Rimanda invito' : 'Invia link password'}</button>`}
+          title="Crea un nuovo link con cui l'utente sceglie la password">${u.pending ? 'Nuovo link di attivazione' : 'Link nuova password'}</button>`}
         <button class="btn small ghost" data-user="password" data-id="${u.id}" title="Imposta tu una password">Password</button>
         ${u.id === me.id ? '' : `<button class="btn small danger ghost" data-user="delete" data-id="${u.id}">Elimina</button>`}
       </td></tr>`).join('')}</tbody></table>`;
@@ -925,7 +925,7 @@ function openUserDialog(mode, user = null) {
   // alla creazione la password è facoltativa: senza, parte l'invito via email
   f.password.required = mode === 'password';
   $('user-pw-text').textContent = mode === 'create'
-    ? 'Password (facoltativa): lasciala vuota e l\'utente riceverà un\'email per sceglierla'
+    ? 'Password (facoltativa): lasciala vuota per ottenere un link di attivazione da inoltrare all\'utente'
     : 'Nuova password (almeno 8 caratteri)';
   f.querySelector('.roles').hidden = mode === 'password';
   f.querySelectorAll('[name=roles]').forEach(cb => { cb.checked = user?.roles.includes(cb.value) ?? false; });
@@ -940,10 +940,10 @@ $('user-form').addEventListener('submit', async e => {
   const f = e.target;
   const { mode, user } = userDialogMode;
   const roles = [...f.querySelectorAll('[name=roles]:checked')].map(cb => cb.value);
-  const invite = mode === 'create' && !f.password.value;
+  let created = null;
   try {
     if (mode === 'create') {
-      await callUsers({ action: 'create', email: f.email.value, password: f.password.value, name: f.name.value,
+      created = await callUsers({ action: 'create', email: f.email.value, password: f.password.value, name: f.name.value,
         roles, redirect_to: adminUrl() });
     } else if (mode === 'edit') {
       await callUsers({ action: 'update', user_id: user.id, name: f.name.value, roles });
@@ -956,14 +956,36 @@ $('user-form').addEventListener('submit', async e => {
   $('user-dialog').close();
   const email = f.email.value;
   await renderUsers().catch(showError);
-  let done = 'Salvato.';
-  if (invite) done = `Utente creato: ${email} riceverà un'email con il link per scegliere la password.`;
-  else if (mode === 'create') done = `Utente creato. Comunica a ${email} la password iniziale: potrà cambiarla da "Cambia password".`;
-  msg($('user-msg'), done, 'ok');
+  if (created?.link) return showUserLink(email, created.link, 'invite');
+  msg($('user-msg'), mode === 'create'
+    ? `Utente creato. Comunica a ${email} la password iniziale: potrà cambiarla da "Cambia password".`
+    : 'Salvato.', 'ok');
 });
 
-// pagina a cui riportano i link delle email (invito e nuova password)
+// pagina a cui riportano i link di attivazione e di nuova password
 const adminUrl = () => location.origin + location.pathname;
+
+// il link non viene salvato né spedito: lo inoltra l'amministratore
+function showUserLink(email, link, kind) {
+  const intro = kind === 'invite'
+    ? `Utente creato. Manda a ${email} questo link di attivazione: aprendolo sceglierà la sua password.`
+    : `Manda a ${email} questo link: aprendolo sceglierà una nuova password.`;
+  const text = `Ciao, ecco il link per ${kind === 'invite' ? 'attivare il tuo accesso' : 'scegliere una nuova password'} `
+    + `all'area riservata: ${link}`;
+  $('user-msg').innerHTML = `<div class="link-box">
+    <div>${esc(intro)}</div>
+    <code>${esc(link)}</code>
+    <div class="small muted">Il link si può usare una sola volta e scade dopo circa un'ora: se scade, creane uno nuovo dall'elenco.</div>
+    <div class="btns">
+      <button type="button" class="btn small" id="user-link-copy">Copia link</button>
+      <a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">WhatsApp</a>
+      <a class="btn small ghost" href="mailto:${esc(email)}?subject=${encodeURIComponent('Accesso area riservata')}&body=${encodeURIComponent(text)}">Email</a>
+    </div></div>`;
+  $('user-link-copy').onclick = async () => {
+    await navigator.clipboard.writeText(link);
+    $('user-link-copy').textContent = 'Copiato ✓';
+  };
+}
 
 $('user-list').addEventListener('click', async e => {
   const btn = e.target.closest('[data-user]');
@@ -972,8 +994,8 @@ $('user-list').addEventListener('click', async e => {
   if (btn.dataset.user === 'link') {
     btn.disabled = true;
     try {
-      await callUsers({ action: 'send_link', user_id: user.id, redirect_to: adminUrl() });
-      msg($('user-msg'), `Email inviata a ${user.email}.`, 'ok');
+      const { link } = await callUsers({ action: 'new_link', user_id: user.id, redirect_to: adminUrl() });
+      showUserLink(user.email, link, 'recovery');
     } catch (err) {
       msg($('user-msg'), err.message);
     }
