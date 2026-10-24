@@ -1,6 +1,6 @@
 # AffittaCamere
 
-Sito per un affittacamere: **vetrina pubblica** (camere, foto, disponibilità, richieste di prenotazione)
+Sito per una **casa vacanze** (uno o più alloggi): **vetrina pubblica** (alloggi, foto, disponibilità, prenotazioni)
 e **area di gestione** (calendario, prenotazioni, messaggi dei clienti, camere e foto, prezzi, testi, utenti con ruoli,
 sincronizzazione con Booking/Airbnb). Dei clienti si conservano solo **email e codice prenotazione**.
 
@@ -11,8 +11,8 @@ sincronizzazione con Booking/Airbnb). Dei clienti si conservano solo **email e c
 
 ```
 docs/                 sito pubblicato
-  index.html          home: camere, chi siamo, contatti
-  camera.html         scheda camera: galleria, calendario, prezzo, pagamento o richiesta
+  index.html          home: alloggio (presentazione se è uno solo, elenco se sono più), chi siamo, contatti
+  camera.html         scheda alloggio: galleria, calendario, prezzo, pagamento o richiesta
   pagamento.html      esito del pagamento
   prenotazione.html   "La mia prenotazione": stato, messaggi e richiesta di cancellazione con codice + email
   privacy.html        informativa privacy (GDPR)

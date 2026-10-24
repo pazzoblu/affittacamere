@@ -120,8 +120,8 @@ create table if not exists site_content (
 );
 
 insert into site_content(key, value) values
-  ('titolo',      'Il mio Affittacamere'),
-  ('sottotitolo', 'Camere accoglienti nel cuore della città'),
+  ('titolo',      'La mia casa vacanze'),
+  ('sottotitolo', 'Una casa accogliente per le tue vacanze'),
   ('chi_siamo',   'Scrivi qui una presentazione della tua struttura.'),
   ('indirizzo',   ''),
   ('telefono',    ''),
@@ -314,7 +314,7 @@ declare
 begin
   select r.min_nights into v_min from rooms r where r.id = p_room and r.published;
   if v_min is null then
-    raise exception 'Camera non trovata';
+    raise exception 'Alloggio non trovato';
   end if;
   select coalesce(nullif(value, '')::int, 30) into v_pct from site_content where key = 'acconto_percentuale';
   select value = '1' into v_active from site_content where key = 'pagamenti_attivi';
@@ -342,7 +342,7 @@ declare
 begin
   select * into v_room from rooms where id = p_room and published;
   if not found then
-    raise exception 'Camera non trovata';
+    raise exception 'Alloggio non trovato';
   end if;
   if p_check_in < current_date or p_check_out <= p_check_in then
     raise exception 'Date non valide';
@@ -351,16 +351,16 @@ begin
     raise exception 'Soggiorno troppo lungo: contattaci direttamente';
   end if;
   if p_check_out - p_check_in < v_room.min_nights then
-    raise exception 'Per questa camera il soggiorno minimo è di % notti', v_room.min_nights;
+    raise exception 'Il soggiorno minimo è di % notti', v_room.min_nights;
   end if;
   if coalesce(trim(p_email), '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
     raise exception 'Inserisci un indirizzo email valido';
   end if;
   if p_guests is not null and (p_guests < 1 or p_guests > v_room.capacity) then
-    raise exception 'Numero ospiti non valido per questa camera (max %)', v_room.capacity;
+    raise exception 'Numero ospiti non valido per questo alloggio (max %)', v_room.capacity;
   end if;
   if not room_is_free(p_room, p_check_in, p_check_out) then
-    raise exception 'La camera non è disponibile in queste date';
+    raise exception 'L''alloggio non è disponibile in queste date';
   end if;
   -- limite anti-spam: max 20 richieste aperte dal sito
   if (select count(*) from bookings where source = 'sito' and status = 'richiesta') >= 20 then
@@ -538,7 +538,7 @@ begin
       else status end,
     notes = case
       when status = 'annullata' and not room_is_free(room_id, check_in, check_out, id)
-      then trim(notes || E'\nATTENZIONE: pagamento ricevuto su prenotazione annullata, camera non più libera: verificare o rimborsare.')
+      then trim(notes || E'\nATTENZIONE: pagamento ricevuto su prenotazione annullata, alloggio non più libero: verificare o rimborsare.')
       else notes end
   where id = v_b.id;
 
@@ -597,7 +597,7 @@ begin
   end if;
   if tg_op = 'INSERT' then
     if not has_role('camere') then
-      raise exception 'Non hai i permessi per aggiungere camere';
+      raise exception 'Non hai i permessi per aggiungere alloggi';
     end if;
     if not has_role('prezzi') and (new.price_from is not null or new.price_weekend is not null or new.min_nights <> 1) then
       raise exception 'Non hai i permessi per impostare i prezzi';
@@ -610,7 +610,7 @@ begin
     if (new.slug, new.name, new.short_description, new.description, new.capacity, new.amenities, new.sort_order, new.published)
        is distinct from (old.slug, old.name, old.short_description, old.description, old.capacity, old.amenities, old.sort_order, old.published)
        and not has_role('camere') then
-      raise exception 'Non hai i permessi per modificare i dati della camera';
+      raise exception 'Non hai i permessi per modificare i dati dell''alloggio';
     end if;
   end if;
   return new;

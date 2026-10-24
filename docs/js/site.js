@@ -34,19 +34,52 @@ async function loadRooms() {
   if (error) throw error;
 
   const el = document.getElementById('rooms');
-  if (!rooms.length) { el.innerHTML = '<p class="empty">Nessuna camera pubblicata.</p>'; return; }
+  if (!rooms.length) { el.innerHTML = '<p class="empty">Nessun alloggio pubblicato.</p>'; return; }
+
+  const coverOf = r => [...r.room_photos].sort((a, b) => a.sort_order - b.sort_order)[0];
+  const guests = r => `👤 fino a ${r.capacity} ${r.capacity === 1 ? 'ospite' : 'ospiti'}`;
+  const price = r => r.price_from != null ? `<span class="price">da <strong>${euro(r.price_from)}</strong>/notte</span>` : '';
+  const link = r => `camera.html?c=${encodeURIComponent(r.slug)}`;
+
+  // con una sola casa la home la presenta per intero; con più case mostra l'elenco
+  if (rooms.length === 1) {
+    const r = rooms[0];
+    const cover = coverOf(r);
+    el.innerHTML = `
+      <div class="feature">
+        <a class="feature-ph" href="${link(r)}" ${cover ? `style="background-image:url('${photoUrl(cover.path)}')"` : ''}
+           aria-label="Foto di ${esc(r.name)}"></a>
+        <div class="feature-body">
+          <h3>${esc(r.name)}</h3>
+          ${r.short_description ? `<p class="lead">${esc(r.short_description)}</p>` : ''}
+          <div class="meta">
+            <span>${guests(r)}${r.min_nights > 1 ? ` · minimo ${r.min_nights} notti` : ''}</span>${price(r)}
+          </div>
+          ${r.amenities.length ? `<ul class="chips">${r.amenities.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}
+          <a class="btn" href="${link(r)}">Foto, disponibilità e prenotazione</a>
+        </div>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('rooms-title').textContent = 'I nostri alloggi';
+  document.getElementById('rooms-subtitle').textContent = 'Scegli la casa e verifica la disponibilità';
+  document.querySelectorAll('a[href="#alloggio"]').forEach(a => {
+    a.textContent = a.classList.contains('btn') ? 'Scopri gli alloggi' : 'Gli alloggi';
+  });
+  el.className = 'rooms';
   el.innerHTML = rooms.map(r => {
-    const first = [...r.room_photos].sort((a, b) => a.sort_order - b.sort_order)[0];
-    const bg = first ? `style="background-image:url('${photoUrl(first.path)}')"` : '';
+    const cover = coverOf(r);
+    const bg = cover ? `style="background-image:url('${photoUrl(cover.path)}')"` : '';
     return `
-      <a class="room-card" href="camera.html?c=${encodeURIComponent(r.slug)}">
+      <a class="room-card" href="${link(r)}">
         <div class="ph" ${bg}></div>
         <div class="body">
           <h3>${esc(r.name)}</h3>
           <p>${esc(r.short_description)}</p>
           <div class="meta">
-            <span>👤 fino a ${r.capacity} ${r.capacity === 1 ? 'ospite' : 'ospiti'}</span>
-            ${r.price_from != null ? `<span class="price">da <strong>${euro(r.price_from)}</strong>/notte</span>` : ''}
+            <span>${guests(r)}</span>
+            ${price(r)}
           </div>
         </div>
       </a>`;

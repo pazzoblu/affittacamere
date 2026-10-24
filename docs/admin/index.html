@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Gestione affittacamere</title>
+  <title>Gestione casa vacanze</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <link rel="stylesheet" href="admin.css">
@@ -35,7 +35,7 @@
         <button data-tab="calendario" data-role="prenotazioni">Calendario</button>
         <button data-tab="prenotazioni" data-role="prenotazioni">Prenotazioni <span class="badge" id="req-badge" hidden></span></button>
         <button data-tab="messaggi" data-role="prenotazioni">Messaggi <span class="badge" id="msg-badge" hidden></span></button>
-        <button data-tab="camere" data-role="camere prezzi">Camere</button>
+        <button data-tab="camere" data-role="camere prezzi">Alloggi</button>
         <button data-tab="contenuti" data-role="camere prezzi">Sito e pagamenti</button>
         <button data-tab="sync" data-role="prenotazioni">Booking / Airbnb</button>
         <button data-tab="utenti" data-role="admin">Utenti</button>
@@ -110,21 +110,21 @@
           <button class="btn" id="new-user">+ Nuovo utente</button>
         </div>
         <p class="muted small"><strong>Amministratore</strong>: tutto, compresi gli utenti ·
-          <strong>Camere</strong>: camere, foto e testi del sito ·
+          <strong>Alloggi</strong>: dati degli alloggi, foto e testi del sito ·
           <strong>Prenotazioni</strong>: calendario, prenotazioni, messaggi, Booking/Airbnb ·
           <strong>Prezzi</strong>: prezzi, stagioni e pagamenti online.</p>
         <div id="user-msg"></div>
         <div id="user-list"></div>
       </section>
 
-      <!-- Camere -->
+      <!-- Alloggi -->
       <section data-panel="camere" hidden>
         <div class="split">
           <div>
-            <div class="toolbar"><h2>Camere</h2><span class="spacer"></span><button class="btn small" id="new-room">+ Nuova</button></div>
+            <div class="toolbar"><h2>Alloggi</h2><span class="spacer"></span><button class="btn small" id="new-room">+ Nuovo</button></div>
             <ul class="room-list" id="room-list"></ul>
           </div>
-          <div id="room-editor" class="card"><p class="muted">Seleziona una camera o creane una nuova.</p></div>
+          <div id="room-editor" class="card"><p class="muted">Seleziona un alloggio o creane uno nuovo.</p></div>
         </div>
       </section>
 
@@ -152,7 +152,7 @@
 
           <div id="content-payments">
           <h2 style="margin-top:28px">Pagamenti online</h2>
-          <p class="muted small">Funzionano dopo aver collegato Stripe (vedi README). Le camere senza prezzo accettano solo richieste.</p>
+          <p class="muted small">Funzionano dopo aver collegato Stripe (vedi README). Gli alloggi senza prezzo accettano solo richieste.</p>
           <label><input type="checkbox" name="pagamenti_attivi" value="1">Permetti di prenotare pagando sul sito</label>
           <div class="grid2">
             <label>Acconto (% del totale)<input name="acconto_percentuale" type="number" min="1" max="100"></label>
@@ -190,7 +190,7 @@
       <div id="bk-cancel-req" class="notice small" hidden></div>
       <div id="bk-external" class="notice small" hidden></div>
       <div class="grid2">
-        <label>Camera<select name="room_id" required></select></label>
+        <label>Alloggio<select name="room_id" required></select></label>
         <label>Stato
           <select name="status">
             <option value="confermata">Confermata</option>
@@ -265,7 +265,7 @@
       <fieldset class="roles">
         <legend>Ruoli</legend>
         <label><input type="checkbox" name="roles" value="admin">Amministratore (tutto, compresi gli utenti)</label>
-        <label><input type="checkbox" name="roles" value="camere">Camere: anagrafica, foto e testi del sito</label>
+        <label><input type="checkbox" name="roles" value="camere">Alloggi: dati degli alloggi, foto e testi del sito</label>
         <label><input type="checkbox" name="roles" value="prenotazioni">Prenotazioni: calendario, messaggi, Booking/Airbnb</label>
         <label><input type="checkbox" name="roles" value="prezzi">Prezzi: listini, stagioni, pagamenti online</label>
       </fieldset>

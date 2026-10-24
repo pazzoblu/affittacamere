@@ -26,7 +26,7 @@ function showView(id) {
 
 function slugify(s) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'camera';
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'alloggio';
 }
 
 // Ridimensiona le foto prima del caricamento (max 1920px, JPEG): pagine veloci e spazio risparmiato
@@ -99,7 +99,7 @@ async function refreshBadge() {
 }
 
 // =====================================================================
-// Calendario (timeline mensile: righe = camere, colonne = giorni)
+// Calendario (timeline mensile: righe = alloggi, colonne = giorni)
 // =====================================================================
 async function renderTimeline() {
   const first = isoDate(new Date(calYear, calMonth, 1));
@@ -128,7 +128,7 @@ async function renderTimeline() {
   });
 
   if (!rooms.length) {
-    tl.innerHTML = html + `<div class="room-lbl" style="grid-row:2;grid-column:1 / -1">Nessuna camera: creala nella scheda Camere.</div>`;
+    tl.innerHTML = html + `<div class="room-lbl" style="grid-row:2;grid-column:1 / -1">Nessun alloggio: crealo nella scheda Alloggi.</div>`;
     return;
   }
 
@@ -195,7 +195,7 @@ $('new-booking').onclick = () => openBooking(null, {});
 let editing = null;
 
 function openBooking(b, defaults = {}) {
-  if (!rooms.length) { alert('Crea prima almeno una camera.'); return; }
+  if (!rooms.length) { alert('Crea prima almeno un alloggio.'); return; }
   editing = b;
   const f = $('bk-form');
   const v = b ?? {
@@ -296,7 +296,7 @@ $('bk-calc').onclick = async () => {
     p_room: f.room_id.value, p_check_in: f.check_in.value, p_check_out: f.check_out.value,
   });
   if (error) return msg($('bk-msg'), error.message);
-  if (data == null) return msg($('bk-msg'), 'Manca un prezzo per qualche notte: imposta il listino nella scheda Camere.');
+  if (data == null) return msg($('bk-msg'), 'Manca un prezzo per qualche notte: imposta il listino nella scheda Alloggi.');
   f.price.value = Number(data).toFixed(2);
   msg($('bk-msg'), '');
 };
@@ -337,7 +337,7 @@ async function confirmNoOverlap(rec, excludeId) {
   if (error) throw error;
   if (!data.length) return true;
   const list = data.map(o => `• ${o.ical_source_id ? SOURCE_LABEL[o.source] : o.code}: ${fmtDate(o.check_in)} → ${fmtDate(o.check_out)}`).join('\n');
-  return confirm(`La camera risulta già occupata in queste date:\n${list}\n\nSalvare comunque?`);
+  return confirm(`L'alloggio risulta già occupato in queste date:\n${list}\n\nSalvare comunque?`);
 }
 
 function afterBookingChange() {
@@ -363,7 +363,7 @@ async function renderBookingList() {
   const el = $('bk-list');
   if (!data.length) { el.innerHTML = '<p class="muted">Nessuna prenotazione.</p>'; return; }
   el.innerHTML = `<table class="bk-table">
-    <thead><tr><th>Date</th><th>Camera</th><th>Cliente</th><th>Canale</th><th>Note</th><th>Pagamento</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Alloggio</th><th>Cliente</th><th>Canale</th><th>Note</th><th>Pagamento</th><th>Stato</th><th></th></tr></thead>
     <tbody>${data.map(b => {
       const n = nightsBetween(b.check_in, b.check_out);
       const cancelReq = b.cancel_requested_at && b.status !== 'annullata';
@@ -407,13 +407,13 @@ $('bk-list').addEventListener('click', async e => {
 });
 
 // =====================================================================
-// Camere
+// Alloggi
 // =====================================================================
 async function renderRoomList() {
   $('room-list').innerHTML = rooms.map(r => `
     <li data-id="${r.id}" class="${r.id === selectedRoomId ? 'on' : ''}">
       <span>${esc(r.name)}</span>${r.published ? '' : '<span class="off">non pubblicata</span>'}
-    </li>`).join('') || '<li class="muted">Nessuna camera</li>';
+    </li>`).join('') || '<li class="muted">Nessun alloggio</li>';
   if (selectedRoomId) await renderRoomEditor(rooms.find(r => r.id === selectedRoomId));
 }
 
@@ -439,7 +439,7 @@ async function renderRoomEditor(r) {
   const ed = $('room-editor');
   ed.innerHTML = `
     <form id="room-form">
-      <h2>${isNew ? 'Nuova camera' : esc(r.name)}</h2>
+      <h2>${isNew ? 'Nuovo alloggio' : esc(r.name)}</h2>
       <fieldset class="plain" ${editInfo ? '' : 'disabled'}>
         <div class="grid2">
           <label>Nome<input name="name" required value="${esc(r.name)}"></label>
@@ -465,13 +465,13 @@ async function renderRoomEditor(r) {
         </div>
       </fieldset>`}
       <div class="actions">
-        ${isNew || !editInfo ? '' : '<button type="button" class="btn danger ghost" id="room-del">Elimina camera</button>'}
+        ${isNew || !editInfo ? '' : '<button type="button" class="btn danger ghost" id="room-del">Elimina alloggio</button>'}
         <span class="spacer"></span>
-        ${editInfo || editPrice ? `<button class="btn" type="submit">${isNew ? 'Crea camera' : 'Salva'}</button>` : ''}
+        ${editInfo || editPrice ? `<button class="btn" type="submit">${isNew ? 'Crea alloggio' : 'Salva'}</button>` : ''}
       </div>
       <div id="room-msg"></div>
     </form>
-    ${isNew ? '<p class="muted small">Dopo aver creato la camera potrai caricare le foto; i prezzi li imposta chi ha il ruolo Prezzi.</p>' : `
+    ${isNew ? '<p class="muted small">Dopo aver creato l'alloggio potrai caricare le foto; i prezzi li imposta chi ha il ruolo Prezzi.</p>' : `
       <div id="season-section" ${editPrice ? '' : 'hidden'}>
       <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
       <h2>Prezzi stagionali</h2>
@@ -518,7 +518,7 @@ async function renderRoomEditor(r) {
     const q = isNew ? sb.from('rooms').insert(rec).select().single() : sb.from('rooms').update(rec).eq('id', r.id).select().single();
     const { data, error } = await q;
     if (error) {
-      msg($('room-msg'), error.code === '23505' ? 'Esiste già una camera con questo indirizzo (slug).' : error.message);
+      msg($('room-msg'), error.code === '23505' ? 'Esiste già un alloggio con questo indirizzo (slug).' : error.message);
       return;
     }
     selectedRoomId = data.id;
@@ -529,7 +529,7 @@ async function renderRoomEditor(r) {
 
   if (isNew) return;
   if (editInfo) $('room-del').onclick = async () => {
-    if (!confirm(`Eliminare la camera "${r.name}" con tutte le sue foto e prenotazioni?`)) return;
+    if (!confirm(`Eliminare l'alloggio "${r.name}" con tutte le sue foto e prenotazioni?`)) return;
     const { data: photos } = await sb.from('room_photos').select('path').eq('room_id', r.id);
     if (photos?.length) await sb.storage.from('photos').remove(photos.map(p => p.path));
     const { error } = await sb.from('rooms').delete().eq('id', r.id);
@@ -537,7 +537,7 @@ async function renderRoomEditor(r) {
     selectedRoomId = null;
     await loadRooms();
     await renderRoomList();
-    $('room-editor').innerHTML = '<p class="muted">Camera eliminata.</p>';
+    $('room-editor').innerHTML = '<p class="muted">Alloggio eliminato.</p>';
   };
   $('photo-files').onchange = async e => {
     const files = [...e.target.files];
@@ -712,7 +712,7 @@ async function renderSync() {
   const { data: sources, error } = await sb.from('ical_sources').select('*').order('created_at');
   if (error) throw error;
   const el = $('sync-rooms');
-  if (!rooms.length) { el.innerHTML = '<p class="muted">Crea prima una camera.</p>'; return; }
+  if (!rooms.length) { el.innerHTML = '<p class="muted">Crea prima un alloggio.</p>'; return; }
 
   el.innerHTML = rooms.map(room => {
     const list = sources.filter(s => s.room_id === room.id);
@@ -740,7 +740,7 @@ async function renderSync() {
         <label>Link iCal del portale<input name="url" type="url" placeholder="https://..." required></label>
         <button class="btn small" type="submit">Aggiungi</button>
       </form>
-      <p class="small muted" style="margin-bottom:0">Link generico (tutte le prenotazioni della camera):
+      <p class="small muted" style="margin-bottom:0">Link generico (tutte le prenotazioni dell'alloggio):
         <code>${esc(exportUrl(room))}</code> <button class="link small" data-copy="${esc(exportUrl(room))}">copia</button></p>
     </div>`;
   }).join('');
@@ -872,7 +872,7 @@ $('msg-list').addEventListener('click', async e => {
 // =====================================================================
 // Utenti (solo amministratori, tramite la funzione "users")
 // =====================================================================
-const ROLE_LABEL = { admin: 'Amministratore', camere: 'Camere', prenotazioni: 'Prenotazioni', prezzi: 'Prezzi' };
+const ROLE_LABEL = { admin: 'Amministratore', camere: 'Alloggi', prenotazioni: 'Prenotazioni', prezzi: 'Prezzi' };
 let users = [];
 let userDialogMode = null; // { mode: 'create' | 'edit' | 'password', user }
 

@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 export const configured = !SUPABASE_URL.includes('YOUR-PROJECT');
 export const sb = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-// Colonne camera leggibili dalla vetrina (il token iCal resta privato)
+// Colonne alloggio leggibili dalla vetrina (il token iCal resta privato)
 export const ROOM_PUBLIC_COLS =
   'id, slug, name, short_description, description, capacity, price_from, price_weekend, min_nights, amenities, sort_order, published';
 

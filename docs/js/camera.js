@@ -103,7 +103,7 @@ async function updateStay() {
   const n = nightsBetween(checkIn, checkOut);
   const head = `<strong>${fmtDate(checkIn)} → ${fmtDate(checkOut)}</strong> · ${n} ${n === 1 ? 'notte' : 'notti'}`;
   if (n < room.min_nights) {
-    stay.innerHTML = `${head}<br>Il soggiorno minimo per questa camera è di ${room.min_nights} notti.`;
+    stay.innerHTML = `${head}<br>Il soggiorno minimo è di ${room.min_nights} notti.`;
     return;
   }
   stay.innerHTML = head;
@@ -192,7 +192,7 @@ async function init() {
   if (res.error) throw res.error;
   room = res.data;
   if (!room) {
-    document.getElementById('config-msg').innerHTML = '<div class="notice">Camera non trovata.</div>';
+    document.getElementById('config-msg').innerHTML = '<div class="notice">Alloggio non trovato.</div>';
     return;
   }
 
