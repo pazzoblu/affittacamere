@@ -471,7 +471,7 @@ async function renderRoomEditor(r) {
       </div>
       <div id="room-msg"></div>
     </form>
-    ${isNew ? '<p class="muted small">Dopo aver creato l'alloggio potrai caricare le foto; i prezzi li imposta chi ha il ruolo Prezzi.</p>' : `
+    ${isNew ? '<p class="muted small">Dopo aver creato l’alloggio potrai caricare le foto; i prezzi li imposta chi ha il ruolo Prezzi.</p>' : `
       <div id="season-section" ${editPrice ? '' : 'hidden'}>
       <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
       <h2>Prezzi stagionali</h2>
