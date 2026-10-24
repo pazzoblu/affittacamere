@@ -895,13 +895,16 @@ async function renderUsers() {
     <thead><tr><th>Utente</th><th>Ruoli</th><th>Ultimo accesso</th><th></th></tr></thead>
     <tbody>${users.map(u => `<tr>
       <td>${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
-        ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}</td>
+        ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}
+        ${u.pending ? '<br><span class="paid in_attesa">invito inviato: deve ancora scegliere la password</span>' : ''}</td>
       <td>${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
         : '<span class="muted small">nessun ruolo: non può entrare</span>'}</td>
       <td class="small">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
       <td class="act">
         <button class="btn small ghost" data-user="edit" data-id="${u.id}">Ruoli</button>
-        <button class="btn small ghost" data-user="password" data-id="${u.id}">Password</button>
+        ${u.id === me.id ? '' : `<button class="btn small ghost" data-user="link" data-id="${u.id}"
+          title="${u.pending ? 'Rimanda l\'email di invito' : 'Manda un\'email per scegliere una nuova password'}">${u.pending ? 'Rimanda invito' : 'Invia link password'}</button>`}
+        <button class="btn small ghost" data-user="password" data-id="${u.id}" title="Imposta tu una password">Password</button>
         ${u.id === me.id ? '' : `<button class="btn small danger ghost" data-user="delete" data-id="${u.id}">Elimina</button>`}
       </td></tr>`).join('')}</tbody></table>`;
 }
@@ -919,7 +922,11 @@ function openUserDialog(mode, user = null) {
   f.name.closest('label').hidden = mode === 'password';
   f.email.closest('label').hidden = mode === 'password';
   $('user-pw-label').hidden = mode === 'edit';
-  f.password.required = mode !== 'edit';
+  // alla creazione la password è facoltativa: senza, parte l'invito via email
+  f.password.required = mode === 'password';
+  $('user-pw-text').textContent = mode === 'create'
+    ? 'Password (facoltativa): lasciala vuota e l\'utente riceverà un\'email per sceglierla'
+    : 'Nuova password (almeno 8 caratteri)';
   f.querySelector('.roles').hidden = mode === 'password';
   f.querySelectorAll('[name=roles]').forEach(cb => { cb.checked = user?.roles.includes(cb.value) ?? false; });
   $('user-dialog').showModal();
@@ -933,9 +940,11 @@ $('user-form').addEventListener('submit', async e => {
   const f = e.target;
   const { mode, user } = userDialogMode;
   const roles = [...f.querySelectorAll('[name=roles]:checked')].map(cb => cb.value);
+  const invite = mode === 'create' && !f.password.value;
   try {
     if (mode === 'create') {
-      await callUsers({ action: 'create', email: f.email.value, password: f.password.value, name: f.name.value, roles });
+      await callUsers({ action: 'create', email: f.email.value, password: f.password.value, name: f.name.value,
+        roles, redirect_to: adminUrl() });
     } else if (mode === 'edit') {
       await callUsers({ action: 'update', user_id: user.id, name: f.name.value, roles });
     } else {
@@ -947,15 +956,30 @@ $('user-form').addEventListener('submit', async e => {
   $('user-dialog').close();
   const email = f.email.value;
   await renderUsers().catch(showError);
-  msg($('user-msg'), mode === 'create'
-    ? `Utente creato. Comunica a ${email} la password iniziale: potrà cambiarla da "Cambia password".`
-    : 'Salvato.', 'ok');
+  let done = 'Salvato.';
+  if (invite) done = `Utente creato: ${email} riceverà un'email con il link per scegliere la password.`;
+  else if (mode === 'create') done = `Utente creato. Comunica a ${email} la password iniziale: potrà cambiarla da "Cambia password".`;
+  msg($('user-msg'), done, 'ok');
 });
+
+// pagina a cui riportano i link delle email (invito e nuova password)
+const adminUrl = () => location.origin + location.pathname;
 
 $('user-list').addEventListener('click', async e => {
   const btn = e.target.closest('[data-user]');
   if (!btn) return;
   const user = users.find(u => u.id === btn.dataset.id);
+  if (btn.dataset.user === 'link') {
+    btn.disabled = true;
+    try {
+      await callUsers({ action: 'send_link', user_id: user.id, redirect_to: adminUrl() });
+      msg($('user-msg'), `Email inviata a ${user.email}.`, 'ok');
+    } catch (err) {
+      msg($('user-msg'), err.message);
+    }
+    btn.disabled = false;
+    return;
+  }
   if (btn.dataset.user !== 'delete') return openUserDialog(btn.dataset.user, user);
   if (!confirm(`Eliminare l'utente ${user.email}? Non potrà più entrare nell'area riservata.`)) return;
   try {
@@ -976,17 +1000,21 @@ const PW_ERRORS = {
   over_email_send_rate_limit: 'Troppe email inviate di recente: riprova tra un\'ora.',
 };
 
-function openPasswordDialog(recovery) {
+// mode: 'change' dal pulsante, 'recovery' dal link "password dimenticata", 'invite' dal link d'invito
+function openPasswordDialog(mode) {
   $('pw-form').reset();
   msg($('pw-msg'), '');
-  $('pw-title').textContent = recovery ? 'Scegli una nuova password' : 'Cambia password';
-  $('pw-hint').textContent = recovery
-    ? 'Hai aperto il link di recupero: imposta la nuova password per entrare.'
-    : 'Scegli una password di almeno 8 caratteri.';
+  $('pw-title').textContent = { change: 'Cambia password', recovery: 'Scegli una nuova password', invite: 'Benvenuto!' }[mode];
+  $('pw-hint').textContent = {
+    change: 'Scegli una password di almeno 8 caratteri.',
+    recovery: 'Hai aperto il link di recupero: imposta la nuova password per entrare.',
+    invite: 'Sei stato invitato nell\'area riservata: scegli la password (almeno 8 caratteri) che userai per entrare.',
+  }[mode];
+  $('pw-cancel').hidden = mode === 'invite';
   $('pw-dialog').showModal();
 }
 
-$('change-pw').onclick = () => openPasswordDialog(false);
+$('change-pw').onclick = () => openPasswordDialog('change');
 $('pw-cancel').onclick = () => $('pw-dialog').close();
 
 $('pw-form').addEventListener('submit', async e => {
@@ -1048,10 +1076,12 @@ if (!configured) {
   sb.auth.onAuthStateChange((event, session) => {
     setTimeout(() => {
       onSession(session).catch(showError);
-      if (event === 'PASSWORD_RECOVERY') {
-        // toglie il token dalla barra degli indirizzi e chiede subito la nuova password
+      const invited = session && window.__authLinkType === 'invite';
+      if (event === 'PASSWORD_RECOVERY' || invited) {
+        // toglie il token dalla barra degli indirizzi e chiede subito la password
+        window.__authLinkType = '';
         history.replaceState(null, '', location.pathname);
-        openPasswordDialog(true);
+        openPasswordDialog(invited ? 'invite' : 'recovery');
       }
     }, 0);
   });

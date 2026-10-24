@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
   <link rel="stylesheet" href="admin.css">
+  <!-- tipo di link email (invite / recovery), letto prima che Supabase ripulisca l'indirizzo -->
+  <script>window.__authLinkType = (location.hash.match(/[#&]type=(\w+)/) || [])[1] || '';</script>
 </head>
 <body>
   <!-- Login -->
@@ -257,7 +259,8 @@
       <h2 id="user-title">Nuovo utente</h2>
       <label>Nome (facoltativo)<input name="name" maxlength="100"></label>
       <label>Email<input name="email" type="email" required></label>
-      <label id="user-pw-label">Password iniziale (almeno 8 caratteri, l'utente potrà cambiarla)
+      <label id="user-pw-label"><span id="user-pw-text">Password (facoltativa): lasciala vuota e l'utente riceverà
+        un'email per scegliersela</span>
         <input name="password" type="password" minlength="8" autocomplete="new-password"></label>
       <fieldset class="roles">
         <legend>Ruoli</legend>

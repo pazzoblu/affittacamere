@@ -1,5 +1,6 @@
 // Gestione degli utenti dell'area riservata, solo per gli amministratori.
-// Azioni: list, create, update (nome e ruoli), set_password, delete.
+// Azioni: list, create (con password o con invito via email), update (nome e ruoli),
+// send_link (rimanda invito o link per la password), set_password, delete.
 // Il database impedisce comunque di togliere l'ultimo amministratore.
 // File autosufficiente: si può pubblicare anche dall'editor della Dashboard Supabase.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
@@ -57,31 +58,58 @@ async function list() {
     name: byId.get(u.id)?.name ?? '',
     roles: byId.get(u.id)?.roles ?? [],
     staff: byId.has(u.id),
+    // invitato via email ma non ha ancora scelto la password
+    pending: !u.email_confirmed_at,
     last_sign_in_at: u.last_sign_in_at,
     created_at: u.created_at,
   })).sort((a, b) => (a.email ?? '').localeCompare(b.email ?? ''));
 }
 
+// indirizzo dell'area riservata a cui riporta il link dell'email (deve essere tra i Redirect URLs di Supabase)
+function redirectTo(body: Record<string, unknown>): string | undefined {
+  const url = String(body.redirect_to ?? '');
+  return /^https?:\/\//.test(url) ? url : undefined;
+}
+
+function emailError(message: string): string {
+  if (/rate limit/i.test(message)) return 'Troppe email inviate di recente: riprova più tardi o imposta un server SMTP in Supabase';
+  return 'Email non inviata: ' + message;
+}
+
+// senza password: Supabase invia un invito e l'utente sceglie la password dal link
 async function create(body: Record<string, unknown>) {
   const email = String(body.email ?? '').trim().toLowerCase();
   const password = String(body.password ?? '');
   const name = String(body.name ?? '').trim().slice(0, 100);
   const roles = cleanRoles(body.roles);
   if (!EMAIL.test(email)) return json({ error: 'Email non valida' }, 400);
-  if (password.length < 8) return json({ error: 'La password deve avere almeno 8 caratteri' }, 400);
+  if (password && password.length < 8) return json({ error: 'La password deve avere almeno 8 caratteri' }, 400);
   if (!roles.length) return json({ error: 'Scegli almeno un ruolo' }, 400);
 
-  const { data, error } = await db.auth.admin.createUser({ email, password, email_confirm: true });
+  const { data, error } = password
+    ? await db.auth.admin.createUser({ email, password, email_confirm: true })
+    : await db.auth.admin.inviteUserByEmail(email, { redirectTo: redirectTo(body) });
   if (error) {
-    const exists = /already/i.test(error.message);
-    return json({ error: exists ? 'Esiste già un utente con questa email' : error.message }, 400);
+    if (/already/i.test(error.message)) return json({ error: 'Esiste già un utente con questa email' }, 400);
+    return json({ error: password ? error.message : emailError(error.message) }, 400);
   }
   const { error: staffErr } = await db.from('staff').insert({ user_id: data.user.id, email, name, roles });
   if (staffErr) {
     await db.auth.admin.deleteUser(data.user.id);
     return json({ error: staffErr.message }, 500);
   }
-  return json({ id: data.user.id });
+  return json({ id: data.user.id, invited: !password });
+}
+
+// rimanda il link: nuovo invito se non ha mai scelto la password, altrimenti link di reimpostazione
+async function sendLink(body: Record<string, unknown>) {
+  const { data: u, error: uErr } = await db.auth.admin.getUserById(String(body.user_id ?? ''));
+  if (uErr || !u.user?.email) return json({ error: 'Utente non trovato' }, 404);
+  const { error } = u.user.email_confirmed_at
+    ? await db.auth.resetPasswordForEmail(u.user.email, { redirectTo: redirectTo(body) })
+    : await db.auth.admin.inviteUserByEmail(u.user.email, { redirectTo: redirectTo(body) });
+  if (error) return json({ error: emailError(error.message) }, 400);
+  return json({ ok: true, invited: !u.user.email_confirmed_at });
 }
 
 // nome e ruoli; crea il profilo anche per utenti nati fuori dall'area riservata (es. dalla Dashboard)
@@ -129,6 +157,7 @@ Deno.serve(async req => {
       case 'list': return json({ users: await list() });
       case 'create': return await create(body);
       case 'update': return await update(body);
+      case 'send_link': return await sendLink(body);
       case 'set_password': return await setPassword(body);
       case 'delete': return await remove(body, me);
       default: return json({ error: 'Azione sconosciuta' }, 400);

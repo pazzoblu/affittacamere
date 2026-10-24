@@ -172,7 +172,9 @@ function usersFunction(body) {
   if (body.action === 'create') {
     if (db.staff.some(s => s.email === body.email)) return err('Esiste già un utente con questa email');
     if (!body.roles.length) return err('Scegli almeno un ruolo');
-    db.staff.push({ user_id: uuid(), email: body.email, name: body.name, roles: body.roles });
+    db.staff.push({ user_id: uuid(), email: body.email, name: body.name, roles: body.roles, pending: !body.password });
+  } else if (body.action === 'send_link') {
+    if (!body.redirect_to) return err('manca redirect_to');
   } else if (body.action === 'update') {
     const s = db.staff.find(x => x.user_id === body.user_id);
     if (!body.roles.length) return err('Scegli almeno un ruolo');
