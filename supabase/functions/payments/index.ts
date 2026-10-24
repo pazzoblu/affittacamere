@@ -2,10 +2,10 @@
 // attivati nella Dashboard Stripe). Azioni:
 //   checkout  (pubblica) prenotazione dal sito: blocca le date e restituisce la pagina di pagamento
 //   cancel    (pubblica) l'ospite è tornato indietro senza pagare: libera subito le date
-//   link      (solo admin) link di pagamento per una prenotazione esistente, valido 23 ore
+//   link      (staff prenotazioni) link di pagamento per una prenotazione esistente, valido 23 ore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { stripeRequest } from '../_shared/stripe.ts';
-import { isAdminRequest } from '../_shared/admin.ts';
+import { hasRole } from '../_shared/admin.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -68,8 +68,7 @@ async function createSession(s: SessionInput) {
 async function checkout(body: Record<string, unknown>) {
   const { data, error } = await db.rpc('create_online_booking', {
     p_room: body.room_id, p_check_in: body.check_in, p_check_out: body.check_out,
-    p_name: body.name, p_email: body.email, p_phone: body.phone ?? '',
-    p_guests: body.guests ?? null, p_notes: body.notes ?? '', p_mode: body.mode,
+    p_email: body.email, p_guests: body.guests ?? null, p_message: body.message ?? '', p_mode: body.mode,
   });
   if (error) return json({ error: error.message }, 400);
   const b = data[0];
@@ -80,7 +79,7 @@ async function checkout(body: Record<string, unknown>) {
       kind: body.mode as 'acconto' | 'totale',
       amount: Number(b.amount),
       title: `${b.room_name}: ${fmt(String(body.check_in))} - ${fmt(String(body.check_out))}`,
-      description: `Prenotazione, ${kindLabel} (totale soggiorno ${Number(b.total).toFixed(2)} €)`,
+      description: `Prenotazione ${b.code}, ${kindLabel} (totale soggiorno ${Number(b.total).toFixed(2)} €)`,
       email: String(body.email),
       // il minimo consentito da Stripe è 30 minuti; il database tiene le date bloccate per 35
       expiresInSec: 30 * 60 + 30,
@@ -120,7 +119,7 @@ async function cancel(body: Record<string, unknown>) {
 async function link(body: Record<string, unknown>) {
   const amount = Math.round(Number(body.amount) * 100) / 100;
   if (!(amount > 0 && amount <= 100000)) return json({ error: 'Importo non valido' }, 400);
-  const { data: b } = await db.from('bookings').select('id, check_in, check_out, guest_email, rooms(name)')
+  const { data: b } = await db.from('bookings').select('id, code, check_in, check_out, guest_email, rooms(name)')
     .eq('id', String(body.booking_id ?? '')).maybeSingle();
   if (!b) return json({ error: 'Prenotazione non trovata' }, 404);
   const roomName = (b.rooms as unknown as { name: string } | null)?.name ?? 'Camera';
@@ -129,7 +128,7 @@ async function link(body: Record<string, unknown>) {
     kind: 'link',
     amount,
     title: `${roomName}: ${fmt(b.check_in)} - ${fmt(b.check_out)}`,
-    description: 'Pagamento soggiorno',
+    description: `Pagamento soggiorno, prenotazione ${b.code}`,
     email: b.guest_email || undefined,
     expiresInSec: 23 * 3600,
     successUrl: `${SITE_URL}/pagamento.html?esito=ok&tipo=link`,
@@ -148,7 +147,7 @@ Deno.serve(async req => {
     if (body.action === 'checkout') return await checkout(body);
     if (body.action === 'cancel') return await cancel(body);
     if (body.action === 'link') {
-      if (!(await isAdminRequest(db, req))) return json({ error: 'non autorizzato' }, 401);
+      if (!(await hasRole(db, req, 'prenotazioni'))) return json({ error: 'non autorizzato' }, 401);
       return await link(body);
     }
     return json({ error: 'Azione sconosciuta' }, 400);

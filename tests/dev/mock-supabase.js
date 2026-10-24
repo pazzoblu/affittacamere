@@ -1,20 +1,42 @@
 // Finto client Supabase in memoria (localStorage) per provare il sito senza un progetto reale.
 // Lo usa solo tests/dev/server.mjs: non viene mai pubblicato.
+// Login demo: qualsiasi password; l'email sceglie l'utente (admin@, camere@, prenotazioni@, prezzi@demo.test).
 
-const KEY = 'affittacamere-demo-db-v2';
+const KEY = 'affittacamere-demo-db-v3';
 const iso = d => d.toISOString().slice(0, 10);
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 const uuid = () => crypto.randomUUID();
+const code = () => Array.from({ length: 8 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 31)]).join('');
+const now = () => new Date().toISOString();
 
 function seed() {
   const r1 = uuid(), r2 = uuid(), r3 = uuid(), s1 = uuid();
+  const bookings = [
+    { room_id: r1, check_in: day(2), check_out: day(5), status: 'confermata', source: 'diretta', guest_email: 'mario@example.com' },
+    { room_id: r1, check_in: day(8), check_out: day(11), status: 'confermata', source: 'booking',
+      ical_source_id: s1, external_uid: 'x1@booking.com' },
+    { room_id: r1, check_in: day(10), check_out: day(12), status: 'confermata', source: 'airbnb' },
+    { room_id: r2, check_in: day(-2), check_out: day(3), status: 'confermata', source: 'airbnb' },
+    { room_id: r2, check_in: day(6), check_out: day(9), status: 'richiesta', source: 'sito',
+      guest_email: 'luca@example.com', guests: 2 },
+    { room_id: r2, check_in: day(15), check_out: day(18), status: 'confermata', source: 'sito', code: 'DEMO2345',
+      guest_email: 'cliente@example.com', guests: 2, price: 255, amount_paid: 76.5, payment_status: 'acconto',
+      cancel_requested_at: now() },
+  ].map(b => ({ id: uuid(), code: code(), guest_email: '', guests: null, price: null, notes: '',
+    ical_source_id: null, external_uid: null, amount_paid: 0, payment_status: 'nessuno', expires_at: null,
+    cancel_requested_at: null, created_at: now(), ...b }));
   return {
-    admins: [{ user_id: 'demo-user' }],
+    staff: [
+      { user_id: 'demo-admin', email: 'admin@demo.test', name: 'Amministratore Demo', roles: ['admin'], last_sign_in_at: now() },
+      { user_id: 'demo-camere', email: 'camere@demo.test', name: 'Anagrafica', roles: ['camere'] },
+      { user_id: 'demo-prenotazioni', email: 'prenotazioni@demo.test', name: 'Reception', roles: ['prenotazioni'] },
+      { user_id: 'demo-prezzi', email: 'prezzi@demo.test', name: '', roles: ['prezzi'] },
+    ],
     site_content: [
       ['titolo', 'Casa Demo'], ['sottotitolo', 'Camere accoglienti a due passi dal centro'],
       ['chi_siamo', 'Siamo una piccola struttura a conduzione familiare.\n\nTi aspettiamo per un soggiorno rilassante.'],
       ['indirizzo', 'Via Roma 1, Palermo'], ['telefono', '+39 091 000000'], ['email', 'info@example.com'],
-      ['whatsapp', '+39 333 0000000'], ['hero_image', ''],
+      ['whatsapp', '+39 333 0000000'], ['hero_image', ''], ['titolare', 'Mario Demo'], ['cf_piva', 'DMEMRA80A01G273X'],
       ['pagamenti_attivi', '1'], ['acconto_percentuale', '30'],
       ['condizioni_cancellazione', "Cancellazione gratuita fino a 7 giorni prima dell'arrivo."],
     ].map(([key, value]) => ({ key, value })),
@@ -33,17 +55,11 @@ function seed() {
     payments: [],
     ical_sources: [{ id: s1, room_id: r1, channel: 'booking', name: 'Booking.com',
       url: 'https://admin.booking.com/hotel/hoteladmin/ical.html?t=demo', last_sync_at: null, last_error: null }],
-    bookings: [
-      { room_id: r1, check_in: day(2), check_out: day(5), status: 'confermata', source: 'diretta', guest_name: 'Mario Rossi' },
-      { room_id: r1, check_in: day(8), check_out: day(11), status: 'confermata', source: 'booking',
-        ical_source_id: s1, external_uid: 'x1@booking.com' },
-      { room_id: r1, check_in: day(10), check_out: day(12), status: 'confermata', source: 'airbnb' },
-      { room_id: r2, check_in: day(-2), check_out: day(3), status: 'confermata', source: 'airbnb', guest_name: 'Anna B.' },
-      { room_id: r2, check_in: day(6), check_out: day(9), status: 'richiesta', source: 'sito', guest_name: 'Luca Verdi',
-        guest_email: 'luca@example.com', guests: 2, notes: 'Arriviamo in serata' },
-    ].map(b => ({ id: uuid(), guest_name: '', guest_email: '', guest_phone: '', guests: null, price: null, notes: '',
-      ical_source_id: null, external_uid: null, amount_paid: 0, payment_status: 'nessuno', expires_at: null,
-      created_at: new Date().toISOString(), ...b })),
+    bookings,
+    notifications: [
+      { id: uuid(), booking_id: bookings[4].id, kind: 'richiesta', message: 'Arriviamo in serata, verso le 21.', read_at: null, created_at: now() },
+      { id: uuid(), booking_id: bookings[5].id, kind: 'cancellazione', message: 'Purtroppo dobbiamo rinviare il viaggio.', read_at: null, created_at: now() },
+    ],
   };
 }
 
@@ -51,6 +67,9 @@ let db;
 try { db = JSON.parse(localStorage.getItem(KEY)) || seed(); } catch { db = seed(); }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* ignora */ } };
 save();
+
+const notify = (booking_id, kind, message) =>
+  db.notifications.push({ id: uuid(), booking_id, kind, message: message ?? '', read_at: null, created_at: now() });
 
 class Query {
   constructor(table) { this.table = table; this.filters = []; this.orders = []; this.op = 'select'; }
@@ -65,6 +84,9 @@ class Query {
   gt(c, v) { this.filters.push(r => r[c] > v); return this; }
   gte(c, v) { this.filters.push(r => r[c] >= v); return this; }
   in(c, v) { this.filters.push(r => v.includes(r[c])); return this; }
+  is(c, v) { this.filters.push(r => (r[c] ?? null) === v); return this; }
+  // solo il filtro usato dall'elenco "Da gestire"
+  or() { this.filters.push(r => r.status === 'richiesta' || (r.status === 'confermata' && r.cancel_requested_at)); return this; }
   order(c, o = {}) { this.orders.push([c, o.ascending !== false]); return this; }
   limit() { return this; }
   single() { this.one = 'single'; return this; }
@@ -76,7 +98,7 @@ class Query {
     const match = r => this.filters.every(f => f(r));
     let out;
     if (this.op === 'insert') {
-      out = [].concat(this.payload).map(p => ({ id: uuid(), ical_token: uuid(), created_at: new Date().toISOString(), ...p }));
+      out = [].concat(this.payload).map(p => ({ id: uuid(), ical_token: uuid(), code: code(), created_at: now(), ...p }));
       if (this.table === 'rooms' && out.some(n => rows.some(r => r.slug === n.slug)))
         return { data: null, error: { code: '23505', message: 'duplicate key' } };
       rows.push(...out);
@@ -100,6 +122,8 @@ class Query {
         out.sort((a, b) => (a[c] > b[c] ? 1 : a[c] < b[c] ? -1 : 0) * (asc ? 1 : -1));
       if (this.cols?.includes('room_photos('))
         out.forEach(r => { r.room_photos = db.room_photos.filter(p => p.room_id === r.id); });
+      if (this.cols?.includes('bookings('))
+        out.forEach(r => { r.bookings = db.bookings.find(b => b.id === r.booking_id) ?? null; });
       if (this.opts?.head) return { data: null, count: out.length, error: null };
     }
     save();
@@ -130,17 +154,42 @@ function quotePrice(roomId, from, to) {
 const content = k => db.site_content.find(c => c.key === k)?.value;
 const isFree = (roomId, a, b) =>
   !db.bookings.some(x => x.room_id === roomId && x.status === 'confermata' && x.check_in < b && x.check_out > a);
+const findGuest = (c, e) => db.bookings.find(b => b.code === String(c).trim().toUpperCase()
+  && b.guest_email && b.guest_email === String(e).trim().toLowerCase());
+const fail = message => ({ data: null, error: { message } });
+const withRoom = b => { const r = db.rooms.find(x => x.id === b.room_id); return { ...b, room_name: r.name, room_slug: r.slug }; };
 
 let session = null;
 try { session = JSON.parse(sessionStorage.getItem('demo-session')); } catch { /* ignora */ }
 const listeners = [];
 const emit = () => listeners.forEach(f => f('SIGNED_IN', session));
 
+function usersFunction(body) {
+  const ok = data => ({ data, error: null });
+  const err = message => ({ data: null, error: { message, context: { json: async () => ({ error: message }) } } });
+  const admins = () => db.staff.filter(s => s.roles.includes('admin')).length;
+  if (body.action === 'list') return ok({ users: db.staff.map(s => ({ id: s.user_id, ...s, staff: true })) });
+  if (body.action === 'create') {
+    if (db.staff.some(s => s.email === body.email)) return err('Esiste già un utente con questa email');
+    if (!body.roles.length) return err('Scegli almeno un ruolo');
+    db.staff.push({ user_id: uuid(), email: body.email, name: body.name, roles: body.roles });
+  } else if (body.action === 'update') {
+    const s = db.staff.find(x => x.user_id === body.user_id);
+    if (!body.roles.length) return err('Scegli almeno un ruolo');
+    if (s.roles.includes('admin') && !body.roles.includes('admin') && admins() === 1) return err('Deve restare almeno un amministratore');
+    Object.assign(s, { name: body.name, roles: body.roles });
+  } else if (body.action === 'delete') {
+    if (body.user_id === session?.user.id) return err('Non puoi eliminare il tuo utente');
+    db.staff = db.staff.filter(x => x.user_id !== body.user_id);
+  }
+  save();
+  return ok({ ok: true });
+}
+
 export function createClient() {
   return {
     from: t => new Query(t),
     rpc: async (fn, a) => {
-      if (fn === 'is_admin') return { data: !!session, error: null };
       if (fn === 'room_busy_ranges')
         return { data: db.bookings.filter(b => b.room_id === a.p_room && b.status === 'confermata' && b.check_out > a.p_from)
           .map(b => ({ check_in: b.check_in, check_out: b.check_out })), error: null };
@@ -154,22 +203,43 @@ export function createClient() {
       }
       if (fn === 'booking_public_status') {
         const b = db.bookings.find(x => x.id === a.p_id);
-        const r = b && db.rooms.find(x => x.id === b.room_id);
-        return { data: b ? [{ ...b, room_name: r.name, room_slug: r.slug }] : [], error: null };
+        return { data: b ? [withRoom(b)] : [], error: null };
       }
       if (fn === 'request_booking') {
-        db.bookings.push({ id: uuid(), room_id: a.p_room, check_in: a.p_check_in, check_out: a.p_check_out,
-          status: 'richiesta', source: 'sito', guest_name: a.p_name, guest_email: a.p_email, guest_phone: a.p_phone,
-          guests: a.p_guests, notes: a.p_notes, price: null, ical_source_id: null, external_uid: null });
+        const b = { id: uuid(), code: code(), room_id: a.p_room, check_in: a.p_check_in, check_out: a.p_check_out,
+          status: 'richiesta', source: 'sito', guest_email: a.p_email.trim().toLowerCase(), guests: a.p_guests,
+          notes: '', price: quotePrice(a.p_room, a.p_check_in, a.p_check_out), amount_paid: 0, payment_status: 'nessuno',
+          ical_source_id: null, external_uid: null, cancel_requested_at: null, created_at: now() };
+        db.bookings.push(b);
+        notify(b.id, 'richiesta', a.p_message);
         save();
-        return { data: uuid(), error: null };
+        return { data: b.code, error: null };
       }
-      return { data: null, error: { message: 'rpc sconosciuta ' + fn } };
+      if (fn === 'booking_lookup') {
+        const b = findGuest(a.p_code, a.p_email);
+        return { data: b ? [withRoom(b)] : [], error: null };
+      }
+      if (fn === 'request_cancellation' || fn === 'send_guest_message') {
+        const b = findGuest(a.p_code, a.p_email);
+        if (!b) return fail('Prenotazione non trovata: controlla codice ed email');
+        if (fn === 'send_guest_message') {
+          if (!a.p_message.trim()) return fail('Scrivi il messaggio');
+          notify(b.id, 'messaggio', a.p_message);
+        } else {
+          if (b.cancel_requested_at) return fail('Hai già richiesto la cancellazione: ti risponderemo al più presto');
+          b.cancel_requested_at = now();
+          notify(b.id, 'cancellazione', a.p_message);
+        }
+        save();
+        return { data: null, error: null };
+      }
+      return fail('rpc sconosciuta ' + fn);
     },
     auth: {
       onAuthStateChange: f => { listeners.push(f); setTimeout(() => f('INITIAL_SESSION', session)); },
-      signInWithPassword: async () => {
-        session = { user: { id: 'demo-user' } };
+      signInWithPassword: async ({ email }) => {
+        const s = db.staff.find(x => x.email === email.trim().toLowerCase());
+        session = { user: { id: s?.user_id ?? 'demo-sconosciuto', email } };
         sessionStorage.setItem('demo-session', JSON.stringify(session));
         emit();
         return { error: null };
@@ -188,6 +258,7 @@ export function createClient() {
     },
     functions: {
       invoke: async (name, { body } = {}) => {
+        if (name === 'users') return usersFunction(body);
         if (name === 'payments') {
           // simula Stripe: il pagamento riesce subito
           if (body.action === 'checkout') {
@@ -195,24 +266,25 @@ export function createClient() {
             const amount = body.mode === 'totale' ? total
               : Math.round(total * (Number(content('acconto_percentuale')) || 30)) / 100;
             const id = uuid();
-            db.bookings.push({ id, room_id: body.room_id, check_in: body.check_in, check_out: body.check_out,
-              status: 'confermata', source: 'sito', guest_name: body.name, guest_email: body.email, guest_phone: body.phone,
-              guests: body.guests, notes: body.notes, price: total, amount_paid: amount,
-              payment_status: amount >= total ? 'pagato' : 'acconto', expires_at: null, ical_source_id: null, external_uid: null });
-            db.payments.push({ id: uuid(), booking_id: id, kind: body.mode, amount, status: 'pagato',
-              created_at: new Date().toISOString() });
+            db.bookings.push({ id, code: code(), room_id: body.room_id, check_in: body.check_in, check_out: body.check_out,
+              status: 'confermata', source: 'sito', guest_email: body.email.trim().toLowerCase(), guests: body.guests,
+              notes: '', price: total, amount_paid: amount, payment_status: amount >= total ? 'pagato' : 'acconto',
+              expires_at: null, ical_source_id: null, external_uid: null, cancel_requested_at: null, created_at: now() });
+            db.payments.push({ id: uuid(), booking_id: id, kind: body.mode, amount, status: 'pagato', created_at: now() });
+            notify(id, 'pagamento', `Pagamento online di ${amount.toFixed(2).replace('.', ',')} € ricevuto.` +
+              (body.message ? `\n\nMessaggio del cliente: ${body.message}` : ''));
             save();
             return { data: { url: `pagamento.html?b=${id}&esito=ok`, booking_id: id }, error: null };
           }
           if (body.action === 'link') {
             db.payments.push({ id: uuid(), booking_id: body.booking_id, kind: 'link', amount: body.amount,
-              status: 'in_attesa', created_at: new Date().toISOString() });
+              status: 'in_attesa', created_at: now() });
             save();
             return { data: { url: 'https://checkout.stripe.com/c/pay/cs_test_demo' }, error: null };
           }
           return { data: { ok: true }, error: null };
         }
-        db.ical_sources.forEach(s => { s.last_sync_at = new Date().toISOString(); });
+        db.ical_sources.forEach(s => { s.last_sync_at = now(); });
         save();
         return { data: { results: db.ical_sources.map(s => ({ id: s.id, name: s.name, events: 1, removed: 0 })) }, error: null };
       },

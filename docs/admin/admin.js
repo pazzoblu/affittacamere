@@ -9,6 +9,9 @@ const CHANNEL_LABEL = { booking: 'Booking', airbnb: 'Airbnb', altro: 'Altro' };
 const today = () => isoDate(new Date());
 
 let rooms = [];
+let me = { id: null, email: '', roles: [] };
+// l'admin ha tutti i ruoli
+const can = role => me.roles.includes('admin') || me.roles.includes(role);
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let selectedRoomId = null;
@@ -61,10 +64,15 @@ const roomName = id => rooms.find(r => r.id === id)?.name ?? '?';
 const loaders = {
   calendario: renderTimeline,
   prenotazioni: renderBookingList,
+  messaggi: renderMessages,
   camere: renderRoomList,
   contenuti: loadContentForm,
   sync: renderSync,
+  utenti: renderUsers,
 };
+
+// una scheda è visibile se l'utente ha almeno uno dei ruoli indicati in data-role
+const tabAllowed = btn => btn.dataset.role.split(' ').some(can);
 
 function openTab(name) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
@@ -79,9 +87,15 @@ function showError(err) {
 }
 
 async function refreshBadge() {
-  const { count } = await sb.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'richiesta');
-  $('req-badge').hidden = !count;
-  $('req-badge').textContent = count || '';
+  if (!can('prenotazioni')) return;
+  const [req, unread] = await Promise.all([
+    sb.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'richiesta'),
+    sb.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
+  ]);
+  for (const [id, count] of [['req-badge', req.count], ['msg-badge', unread.count]]) {
+    $(id).hidden = !count;
+    $(id).textContent = count || '';
+  }
 }
 
 // =====================================================================
@@ -146,9 +160,12 @@ async function renderTimeline() {
       if (b._conflict) cls.push('conflict');
       if (b.check_in < first) cls.push('cont-l');
       if (b.check_out > next) cls.push('cont-r');
-      const label = b.guest_name || SOURCE_LABEL[b.source];
-      const tip = `${label} · ${fmtDate(b.check_in)} → ${fmtDate(b.check_out)} · ${SOURCE_LABEL[b.source]}` +
-        (b.status === 'richiesta' ? ' (da confermare)' : '') + (b._conflict ? ' · SOVRAPPOSTA!' : '');
+      const label = b.ical_source_id ? SOURCE_LABEL[b.source] : b.code;
+      if (b.cancel_requested_at && b.status !== 'annullata') cls.push('cancel-req');
+      const tip = `${label}${b.guest_email ? ` (${b.guest_email})` : ''} · ${fmtDate(b.check_in)} → ${fmtDate(b.check_out)} · ` +
+        SOURCE_LABEL[b.source] + (b.status === 'richiesta' ? ' (da confermare)' : '') +
+        (b.cancel_requested_at && b.status !== 'annullata' ? ' · CANCELLAZIONE RICHIESTA' : '') +
+        (b._conflict ? ' · SOVRAPPOSTA!' : '');
       html += `<div class="${cls.join(' ')}" data-id="${b.id}" title="${esc(tip)}"
         style="grid-row:${row + b._lane};grid-column:${s + 2} / ${e + 2}">${esc(label)}</div>`;
     }
@@ -187,10 +204,16 @@ function openBooking(b, defaults = {}) {
     check_out: addDays(defaults.check_in ?? today(), 1),
     status: 'confermata', source: 'diretta',
   };
-  for (const k of ['room_id', 'check_in', 'check_out', 'status', 'source', 'guest_name', 'guest_email',
-    'guest_phone', 'guests', 'price', 'amount_paid', 'notes']) {
+  for (const k of ['room_id', 'check_in', 'check_out', 'status', 'source', 'guest_email',
+    'guests', 'price', 'amount_paid', 'notes']) {
     f[k].value = v[k] ?? '';
   }
+  $('bk-code').innerHTML = b ? `Codice prenotazione <strong class="code">${esc(b.code)}</strong>` : '';
+  const cancelReq = b?.cancel_requested_at && b.status !== 'annullata';
+  $('bk-cancel-req').hidden = !cancelReq;
+  $('bk-cancel-req').textContent = cancelReq
+    ? `Il cliente ha chiesto la cancellazione il ${new Date(b.cancel_requested_at).toLocaleString('it-IT')}: ` +
+      'imposta lo stato "Annullata", rispondigli via email ed eventualmente rimborsa da Stripe.' : '';
   $('bk-pay').hidden = !b;
   $('link-out').innerHTML = '';
   if (b) {
@@ -202,7 +225,7 @@ function openBooking(b, defaults = {}) {
   const external = !!b?.ical_source_id;
   $('bk-external').hidden = !external;
   $('bk-external').textContent = external
-    ? `Importata da ${SOURCE_LABEL[b.source]}: date e stato si aggiornano dalla sincronizzazione. Puoi aggiungere i dati dell'ospite e le note.`
+    ? `Importata da ${SOURCE_LABEL[b.source]}: date e stato si aggiornano dalla sincronizzazione. Puoi aggiungere numero di ospiti, importi e note.`
     : '';
   for (const k of ['room_id', 'check_in', 'check_out', 'status', 'source']) f[k].disabled = external;
   msg($('bk-msg'), '');
@@ -215,9 +238,7 @@ $('bk-form').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
   const rec = {
-    guest_name: f.guest_name.value.trim(),
-    guest_email: f.guest_email.value.trim(),
-    guest_phone: f.guest_phone.value.trim(),
+    guest_email: f.guest_email.value.trim().toLowerCase(),
     guests: f.guests.value ? Number(f.guests.value) : null,
     price: f.price.value ? Number(f.price.value) : null,
     amount_paid: Number(f.amount_paid.value) || 0,
@@ -291,14 +312,13 @@ $('link-create').onclick = async () => {
   btn.disabled = false;
   if (error) return msg($('bk-msg'), 'Link non creato: ' + await functionError(error));
   const f = $('bk-form');
-  const text = `Ciao ${f.guest_name.value || ''}, ecco il link per il pagamento di ${euro(amount)} ` +
-    `per il soggiorno dal ${fmtDate(f.check_in.value)} al ${fmtDate(f.check_out.value)}: ${data.url}`;
-  const phone = f.guest_phone.value.replace(/[^\d]/g, '');
+  const text = `Buongiorno, ecco il link per il pagamento di ${euro(amount)} per la prenotazione ${editing.code} ` +
+    `(soggiorno dal ${fmtDate(f.check_in.value)} al ${fmtDate(f.check_out.value)}): ${data.url}`;
   $('link-out').innerHTML = `<div class="link-box">
     Link valido 23 ore:<br><code>${esc(data.url)}</code>
     <div class="btns">
       <button type="button" class="btn small ghost" id="link-copy">Copia</button>
-      <a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/${phone}?text=${encodeURIComponent(text)}">WhatsApp</a>
+      <a class="btn small ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">WhatsApp</a>
       ${f.guest_email.value ? `<a class="btn small ghost" href="mailto:${esc(f.guest_email.value)}?subject=${encodeURIComponent('Pagamento soggiorno')}&body=${encodeURIComponent(text)}">Email</a>` : ''}
     </div></div>`;
   $('link-copy').onclick = async () => {
@@ -309,14 +329,14 @@ $('link-create').onclick = async () => {
 };
 
 async function confirmNoOverlap(rec, excludeId) {
-  let q = sb.from('bookings').select('guest_name, source, check_in, check_out')
+  let q = sb.from('bookings').select('code, ical_source_id, source, check_in, check_out')
     .eq('room_id', rec.room_id).eq('status', 'confermata')
     .lt('check_in', rec.check_out).gt('check_out', rec.check_in);
   if (excludeId) q = q.neq('id', excludeId);
   const { data, error } = await q;
   if (error) throw error;
   if (!data.length) return true;
-  const list = data.map(o => `• ${o.guest_name || SOURCE_LABEL[o.source]}: ${fmtDate(o.check_in)} → ${fmtDate(o.check_out)}`).join('\n');
+  const list = data.map(o => `• ${o.ical_source_id ? SOURCE_LABEL[o.source] : o.code}: ${fmtDate(o.check_in)} → ${fmtDate(o.check_out)}`).join('\n');
   return confirm(`La camera risulta già occupata in queste date:\n${list}\n\nSalvare comunque?`);
 }
 
@@ -333,7 +353,7 @@ async function renderBookingList() {
   const filter = $('bk-filter').value;
   const t = today();
   let q = sb.from('bookings').select('*');
-  if (filter === 'richieste') q = q.eq('status', 'richiesta').order('check_in');
+  if (filter === 'richieste') q = q.or('status.eq.richiesta,and(status.eq.confermata,cancel_requested_at.not.is.null)').order('check_in');
   if (filter === 'prossime') q = q.eq('status', 'confermata').gte('check_out', t).order('check_in');
   if (filter === 'passate') q = q.eq('status', 'confermata').lt('check_out', t).order('check_in', { ascending: false }).limit(200);
   if (filter === 'annullate') q = q.eq('status', 'annullata').order('check_in', { ascending: false }).limit(200);
@@ -343,20 +363,19 @@ async function renderBookingList() {
   const el = $('bk-list');
   if (!data.length) { el.innerHTML = '<p class="muted">Nessuna prenotazione.</p>'; return; }
   el.innerHTML = `<table class="bk-table">
-    <thead><tr><th>Date</th><th>Camera</th><th>Ospite</th><th>Canale</th><th>Note</th><th>Pagamento</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Camera</th><th>Cliente</th><th>Canale</th><th>Note</th><th>Pagamento</th><th>Stato</th><th></th></tr></thead>
     <tbody>${data.map(b => {
       const n = nightsBetween(b.check_in, b.check_out);
-      const contacts = [b.guest_email && `<a href="mailto:${esc(b.guest_email)}">${esc(b.guest_email)}</a>`,
-        b.guest_phone && `<a href="tel:${esc(b.guest_phone)}">${esc(b.guest_phone)}</a>`].filter(Boolean).join('<br>');
-      return `<tr>
+      const cancelReq = b.cancel_requested_at && b.status !== 'annullata';
+      return `<tr${cancelReq ? ' class="row-alert"' : ''}>
         <td>${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}<br><span class="muted small">${n} ${n === 1 ? 'notte' : 'notti'}</span></td>
         <td>${esc(roomName(b.room_id))}</td>
-        <td>${esc(b.guest_name) || '<span class="muted">—</span>'}${b.guests ? ` <span class="muted small">(${b.guests})</span>` : ''}
-          ${contacts ? `<br><span class="small">${contacts}</span>` : ''}</td>
+        <td><strong class="code">${esc(b.code)}</strong>${b.guests ? ` <span class="muted small">(${b.guests} osp.)</span>` : ''}
+          ${b.guest_email ? `<br><a class="small" href="mailto:${esc(b.guest_email)}?subject=${encodeURIComponent('Prenotazione ' + b.code)}">${esc(b.guest_email)}</a>` : ''}</td>
         <td><span class="pill bg-${b.source}">${SOURCE_LABEL[b.source]}</span></td>
         <td class="small">${esc(b.notes)}</td>
         <td>${paymentCell(b)}</td>
-        <td><span class="st ${b.status}">${b.status}</span></td>
+        <td><span class="st ${b.status}">${b.status}</span>${cancelReq ? '<br><span class="paid in_attesa">cancellazione richiesta</span>' : ''}</td>
         <td class="act">
           ${b.status === 'richiesta' ? `<button class="btn small" data-act="ok" data-id="${b.id}">Conferma</button>
             <button class="btn small danger ghost" data-act="no" data-id="${b.id}">Rifiuta</button>` : ''}
@@ -414,35 +433,46 @@ async function renderRoomEditor(r) {
   const isNew = !r;
   r = r ?? { name: '', slug: '', short_description: '', description: '', capacity: 2, price_from: null,
     amenities: [], sort_order: rooms.length, published: true };
+  // l'anagrafica la modifica il ruolo "camere", i prezzi il ruolo "prezzi" (il database fa lo stesso controllo)
+  const editInfo = can('camere');
+  const editPrice = can('prezzi') && !isNew;
   const ed = $('room-editor');
   ed.innerHTML = `
     <form id="room-form">
       <h2>${isNew ? 'Nuova camera' : esc(r.name)}</h2>
-      <div class="grid2">
-        <label>Nome<input name="name" required value="${esc(r.name)}"></label>
-        <label>Indirizzo pagina (slug)<input name="slug" required pattern="[a-z0-9\\-]+" value="${esc(r.slug)}"
-          title="solo lettere minuscole, numeri e trattini"></label>
-      </div>
-      <label>Descrizione breve (nella scheda della home)<input name="short_description" maxlength="200" value="${esc(r.short_description)}"></label>
-      <label>Descrizione completa (riga vuota = nuovo paragrafo)<textarea name="description" rows="7">${esc(r.description)}</textarea></label>
-      <div class="grid2">
-        <label>Ospiti massimi<input name="capacity" type="number" min="1" required value="${r.capacity}"></label>
-        <label>Soggiorno minimo (notti)<input name="min_nights" type="number" min="1" required value="${r.min_nights ?? 1}"></label>
-        <label>Prezzo base a notte (€)<input name="price_from" type="number" min="0" step="0.01" value="${r.price_from ?? ''}"></label>
-        <label>Prezzo notti di venerdì e sabato (€, vuoto = base)<input name="price_weekend" type="number" min="0" step="0.01" value="${r.price_weekend ?? ''}"></label>
-        <label>Ordine in elenco<input name="sort_order" type="number" value="${r.sort_order}"></label>
-        <label style="align-self:end"><input type="checkbox" name="published" ${r.published ? 'checked' : ''}>Pubblicata sul sito</label>
-      </div>
-      <label>Servizi (separati da virgola)<input name="amenities" value="${esc(r.amenities.join(', '))}"
-        placeholder="Wi-Fi, Aria condizionata, Bagno privato, TV"></label>
+      <fieldset class="plain" ${editInfo ? '' : 'disabled'}>
+        <div class="grid2">
+          <label>Nome<input name="name" required value="${esc(r.name)}"></label>
+          <label>Indirizzo pagina (slug)<input name="slug" required pattern="[a-z0-9\\-]+" value="${esc(r.slug)}"
+            title="solo lettere minuscole, numeri e trattini"></label>
+        </div>
+        <label>Descrizione breve (nella scheda della home)<input name="short_description" maxlength="200" value="${esc(r.short_description)}"></label>
+        <label>Descrizione completa (riga vuota = nuovo paragrafo)<textarea name="description" rows="7">${esc(r.description)}</textarea></label>
+        <div class="grid2">
+          <label>Ospiti massimi<input name="capacity" type="number" min="1" required value="${r.capacity}"></label>
+          <label>Ordine in elenco<input name="sort_order" type="number" value="${r.sort_order}"></label>
+        </div>
+        <label>Servizi (separati da virgola)<input name="amenities" value="${esc(r.amenities.join(', '))}"
+          placeholder="Wi-Fi, Aria condizionata, Bagno privato, TV"></label>
+        <label><input type="checkbox" name="published" ${r.published ? 'checked' : ''}>Pubblicata sul sito</label>
+      </fieldset>
+      ${isNew ? '' : `<fieldset class="plain" ${editPrice ? '' : 'disabled'}>
+        <h3 class="sub">Prezzi${editPrice ? '' : ' <span class="muted small">(li gestisce chi ha il ruolo Prezzi)</span>'}</h3>
+        <div class="grid2">
+          <label>Prezzo base a notte (€)<input name="price_from" type="number" min="0" step="0.01" value="${r.price_from ?? ''}"></label>
+          <label>Prezzo notti di venerdì e sabato (€, vuoto = base)<input name="price_weekend" type="number" min="0" step="0.01" value="${r.price_weekend ?? ''}"></label>
+          <label>Soggiorno minimo (notti)<input name="min_nights" type="number" min="1" required value="${r.min_nights ?? 1}"></label>
+        </div>
+      </fieldset>`}
       <div class="actions">
-        ${isNew ? '' : '<button type="button" class="btn danger ghost" id="room-del">Elimina camera</button>'}
+        ${isNew || !editInfo ? '' : '<button type="button" class="btn danger ghost" id="room-del">Elimina camera</button>'}
         <span class="spacer"></span>
-        <button class="btn" type="submit">${isNew ? 'Crea camera' : 'Salva'}</button>
+        ${editInfo || editPrice ? `<button class="btn" type="submit">${isNew ? 'Crea camera' : 'Salva'}</button>` : ''}
       </div>
       <div id="room-msg"></div>
     </form>
-    ${isNew ? '<p class="muted small">Dopo aver creato la camera potrai caricare le foto e i prezzi stagionali.</p>' : `
+    ${isNew ? '<p class="muted small">Dopo aver creato la camera potrai caricare le foto; i prezzi li imposta chi ha il ruolo Prezzi.</p>' : `
+      <div id="season-section" ${editPrice ? '' : 'hidden'}>
       <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
       <h2>Prezzi stagionali</h2>
       <p class="muted small">Nei periodi indicati (date delle notti, estremi inclusi) sostituiscono i prezzi base.
@@ -457,26 +487,34 @@ async function renderRoomEditor(r) {
         <button class="btn small" type="submit">Aggiungi</button>
       </form>
       <div id="season-msg"></div>
+      </div>
+      <div id="photo-section" ${editInfo ? '' : 'hidden'}>
       <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
       <h2>Foto</h2>
       <p class="muted small">La prima foto è la copertina. Le immagini vengono ridimensionate automaticamente.</p>
       <div class="photos" id="photos"></div>
       <input type="file" id="photo-files" accept="image/*" multiple>
-      <div id="photo-msg"></div>`}`;
+      <div id="photo-msg"></div>
+      </div>`}`;
 
   const f = $('room-form');
   if (isNew) f.name.addEventListener('input', () => { f.slug.value = slugify(f.name.value); });
   f.onsubmit = async e => {
     e.preventDefault();
-    const rec = {
+    // si inviano solo i campi che l'utente può modificare
+    const rec = {};
+    if (editInfo) Object.assign(rec, {
       name: f.name.value.trim(), slug: f.slug.value.trim(),
       short_description: f.short_description.value.trim(), description: f.description.value,
-      capacity: Number(f.capacity.value), min_nights: Number(f.min_nights.value) || 1,
-      price_from: f.price_from.value ? Number(f.price_from.value) : null,
-      price_weekend: f.price_weekend.value ? Number(f.price_weekend.value) : null,
+      capacity: Number(f.capacity.value),
       sort_order: Number(f.sort_order.value) || 0, published: f.published.checked,
       amenities: f.amenities.value.split(',').map(s => s.trim()).filter(Boolean),
-    };
+    });
+    if (editPrice) Object.assign(rec, {
+      min_nights: Number(f.min_nights.value) || 1,
+      price_from: f.price_from.value ? Number(f.price_from.value) : null,
+      price_weekend: f.price_weekend.value ? Number(f.price_weekend.value) : null,
+    });
     const q = isNew ? sb.from('rooms').insert(rec).select().single() : sb.from('rooms').update(rec).eq('id', r.id).select().single();
     const { data, error } = await q;
     if (error) {
@@ -490,7 +528,7 @@ async function renderRoomEditor(r) {
   };
 
   if (isNew) return;
-  $('room-del').onclick = async () => {
+  if (editInfo) $('room-del').onclick = async () => {
     if (!confirm(`Eliminare la camera "${r.name}" con tutte le sue foto e prenotazioni?`)) return;
     const { data: photos } = await sb.from('room_photos').select('path').eq('room_id', r.id);
     if (photos?.length) await sb.storage.from('photos').remove(photos.map(p => p.path));
@@ -625,11 +663,14 @@ async function loadContentForm() {
   }
   $('hero-preview').style.backgroundImage = c.hero_image ? `url("${photoUrl(c.hero_image)}")` : '';
   $('hero-preview').dataset.path = c.hero_image ?? '';
+  // testi del sito: ruolo "camere"; impostazioni dei pagamenti: ruolo "prezzi"
+  $('content-texts').hidden = !can('camere');
+  $('content-payments').hidden = !can('prezzi');
 }
 
 $('content-form').addEventListener('submit', async e => {
   e.preventDefault();
-  const rows = [...e.target.elements].filter(el => el.name).map(el => ({
+  const rows = [...e.target.elements].filter(el => el.name && !el.closest('[hidden]')).map(el => ({
     key: el.name, value: el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value.trim(),
   }));
   const { error } = await sb.from('site_content').upsert(rows);
@@ -766,6 +807,166 @@ $('login-form').addEventListener('submit', async e => {
   if (error) msg($('login-msg'), error.message === 'Invalid login credentials' ? 'Email o password errati.' : error.message);
 });
 
+// =====================================================================
+// Messaggi e notifiche dei clienti
+// =====================================================================
+const NOTE_KIND = {
+  richiesta: ['Nuova richiesta dal sito', 'wait'],
+  pagamento: ['Prenotazione pagata online', 'ok'],
+  cancellazione: ['Richiesta di cancellazione', 'alert'],
+  messaggio: ['Messaggio del cliente', 'info'],
+};
+
+async function renderMessages() {
+  let q = sb.from('notifications')
+    .select('*, bookings(id, code, guest_email, check_in, check_out, room_id, status)')
+    .order('created_at', { ascending: false }).limit(200);
+  if ($('msg-filter').value === 'nuovi') q = q.is('read_at', null);
+  const { data, error } = await q;
+  if (error) throw error;
+  const el = $('msg-list');
+  if (!data.length) { el.innerHTML = '<p class="muted">Nessun messaggio.</p>'; return; }
+  el.innerHTML = data.map(n => {
+    const b = n.bookings;
+    const [label, cls] = NOTE_KIND[n.kind];
+    const subject = encodeURIComponent(`Prenotazione ${b?.code ?? ''}`);
+    return `<div class="note-card ${n.read_at ? 'read' : ''}" data-id="${n.id}">
+      <div class="note-head">
+        <span class="note-kind ${cls}">${label}</span>
+        <span class="muted small">${new Date(n.created_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</span>
+      </div>
+      ${b ? `<div class="small"><strong class="code">${esc(b.code)}</strong> · ${esc(roomName(b.room_id))} ·
+        ${fmtDate(b.check_in)} → ${fmtDate(b.check_out)} · <span class="st ${b.status}">${b.status}</span></div>` : ''}
+      ${n.message ? `<div class="note-text">${esc(n.message)}</div>` : ''}
+      <div class="note-actions">
+        ${b ? `<button class="btn small ghost" data-note="open">Apri prenotazione</button>` : ''}
+        ${b?.guest_email ? `<a class="btn small ghost" href="mailto:${esc(b.guest_email)}?subject=${subject}">Rispondi via email</a>` : ''}
+        ${n.read_at ? '' : '<button class="btn small ghost" data-note="read">Segna come letto</button>'}
+        <button class="btn small danger ghost" data-note="delete">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el._data = data;
+}
+
+$('msg-filter').onchange = () => renderMessages().catch(showError);
+$('msg-list').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-note]');
+  if (!btn) return;
+  const n = $('msg-list')._data.find(x => x.id === btn.closest('.note-card').dataset.id);
+  if (btn.dataset.note === 'open') {
+    const { data: b, error } = await sb.from('bookings').select('*').eq('id', n.bookings.id).single();
+    if (error) return showError(error);
+    if (!n.read_at) await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id);
+    return openBooking(b);
+  }
+  if (btn.dataset.note === 'delete' && !confirm('Eliminare il messaggio?')) return;
+  const { error } = btn.dataset.note === 'read'
+    ? await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id)
+    : await sb.from('notifications').delete().eq('id', n.id);
+  if (error) return showError(error);
+  refreshBadge();
+  renderMessages().catch(showError);
+});
+
+// =====================================================================
+// Utenti (solo amministratori, tramite la funzione "users")
+// =====================================================================
+const ROLE_LABEL = { admin: 'Amministratore', camere: 'Camere', prenotazioni: 'Prenotazioni', prezzi: 'Prezzi' };
+let users = [];
+let userDialogMode = null; // { mode: 'create' | 'edit' | 'password', user }
+
+async function callUsers(body) {
+  const { data, error } = await sb.functions.invoke('users', { body });
+  if (error) throw new Error(await functionError(error));
+  return data;
+}
+
+async function renderUsers() {
+  const el = $('user-list');
+  try {
+    users = (await callUsers({ action: 'list' })).users;
+  } catch (err) {
+    el.innerHTML = '';
+    return msg($('user-msg'), `Elenco utenti non disponibile: ${err.message}. La funzione "users" è stata pubblicata su Supabase? (vedi README)`);
+  }
+  msg($('user-msg'), '');
+  el.innerHTML = `<table class="bk-table">
+    <thead><tr><th>Utente</th><th>Ruoli</th><th>Ultimo accesso</th><th></th></tr></thead>
+    <tbody>${users.map(u => `<tr>
+      <td>${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
+        ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}</td>
+      <td>${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
+        : '<span class="muted small">nessun ruolo: non può entrare</span>'}</td>
+      <td class="small">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
+      <td class="act">
+        <button class="btn small ghost" data-user="edit" data-id="${u.id}">Ruoli</button>
+        <button class="btn small ghost" data-user="password" data-id="${u.id}">Password</button>
+        ${u.id === me.id ? '' : `<button class="btn small danger ghost" data-user="delete" data-id="${u.id}">Elimina</button>`}
+      </td></tr>`).join('')}</tbody></table>`;
+}
+
+function openUserDialog(mode, user = null) {
+  userDialogMode = { mode, user };
+  const f = $('user-form');
+  f.reset();
+  msg($('user-form-msg'), '');
+  $('user-title').textContent = { create: 'Nuovo utente', edit: 'Nome e ruoli', password: 'Nuova password' }[mode]
+    + (user ? ` · ${user.email}` : '');
+  f.name.value = user?.name ?? '';
+  f.email.value = user?.email ?? '';
+  f.email.disabled = mode !== 'create';
+  f.name.closest('label').hidden = mode === 'password';
+  f.email.closest('label').hidden = mode === 'password';
+  $('user-pw-label').hidden = mode === 'edit';
+  f.password.required = mode !== 'edit';
+  f.querySelector('.roles').hidden = mode === 'password';
+  f.querySelectorAll('[name=roles]').forEach(cb => { cb.checked = user?.roles.includes(cb.value) ?? false; });
+  $('user-dialog').showModal();
+}
+
+$('new-user').onclick = () => openUserDialog('create');
+$('user-cancel').onclick = () => $('user-dialog').close();
+
+$('user-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  const { mode, user } = userDialogMode;
+  const roles = [...f.querySelectorAll('[name=roles]:checked')].map(cb => cb.value);
+  try {
+    if (mode === 'create') {
+      await callUsers({ action: 'create', email: f.email.value, password: f.password.value, name: f.name.value, roles });
+    } else if (mode === 'edit') {
+      await callUsers({ action: 'update', user_id: user.id, name: f.name.value, roles });
+    } else {
+      await callUsers({ action: 'set_password', user_id: user.id, password: f.password.value });
+    }
+  } catch (err) {
+    return msg($('user-form-msg'), err.message);
+  }
+  $('user-dialog').close();
+  const email = f.email.value;
+  await renderUsers().catch(showError);
+  msg($('user-msg'), mode === 'create'
+    ? `Utente creato. Comunica a ${email} la password iniziale: potrà cambiarla da "Cambia password".`
+    : 'Salvato.', 'ok');
+});
+
+$('user-list').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-user]');
+  if (!btn) return;
+  const user = users.find(u => u.id === btn.dataset.id);
+  if (btn.dataset.user !== 'delete') return openUserDialog(btn.dataset.user, user);
+  if (!confirm(`Eliminare l'utente ${user.email}? Non potrà più entrare nell'area riservata.`)) return;
+  try {
+    await callUsers({ action: 'delete', user_id: user.id });
+  } catch (err) {
+    return msg($('user-msg'), err.message);
+  }
+  await renderUsers().catch(showError);
+  msg($('user-msg'), 'Utente eliminato.', 'ok');
+});
+
 // ---------------------------------------------------------------------
 // Password: cambio dall'area riservata e recupero via email
 // ---------------------------------------------------------------------
@@ -810,23 +1011,33 @@ let started = false;
 async function onSession(session) {
   if (!session) { started = false; showView('login-view'); return; }
   if (started) return;
-  const { data: isAdmin, error } = await sb.rpc('is_admin');
-  if (error || !isAdmin) {
+  const { data: staff, error } = await sb.from('staff').select('name, roles').eq('user_id', session.user.id).maybeSingle();
+  if (error || !staff?.roles?.length) {
     $('msg-card').innerHTML = `<h1>Accesso non autorizzato</h1>
-      <p>Il tuo utente non è amministratore. Per abilitarlo esegui nel SQL Editor di Supabase:</p>
-      <p><code>insert into admins(user_id) values ('${esc(session.user.id)}');</code></p>
+      <p>Il tuo utente non ha ruoli nell'area riservata: chiedi a un amministratore di abilitarti.</p>
+      <p class="small muted">Primo accesso? Esegui nel SQL Editor di Supabase:<br>
+      <code>insert into staff(user_id, email, roles) values ('${esc(session.user.id)}', '${esc(session.user.email ?? '')}', '{admin}');</code></p>
       <button class="btn" id="msg-logout">Esci</button>`;
     $('msg-logout').onclick = () => sb.auth.signOut();
     showView('msg-view');
     return;
   }
   started = true;
+  me = { id: session.user.id, email: session.user.email ?? '', roles: staff.roles };
+  $('me-label').textContent = staff.name || me.email;
+  document.querySelectorAll('#tabs button').forEach(b => { b.hidden = !tabAllowed(b); });
+  $('new-room').hidden = !can('camere');
+  $('new-booking').hidden = !can('prenotazioni');
   showView('app-view');
   await loadRooms();
   refreshBadge();
-  let tab = 'calendario';
-  try { tab = localStorage.getItem('admin-tab') || tab; } catch { /* storage non disponibile */ }
-  openTab(loaders[tab] ? tab : 'calendario');
+  const allowed = [...document.querySelectorAll('#tabs button')].filter(tabAllowed).map(b => b.dataset.tab);
+  let tab = allowed[0];
+  try {
+    const saved = localStorage.getItem('admin-tab');
+    if (allowed.includes(saved)) tab = saved;
+  } catch { /* storage non disponibile */ }
+  openTab(tab);
 }
 
 if (!configured) {

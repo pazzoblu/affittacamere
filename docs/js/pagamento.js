@@ -22,6 +22,9 @@ async function confirmed() {
     if (b.status === 'confermata') {
       const rest = Number(b.price ?? 0) - Number(b.amount_paid);
       return show('🎉', 'Prenotazione confermata!', `
+        <p>Codice prenotazione: <strong class="code">${esc(b.code)}</strong><br>
+          <small>annotalo: con il codice e la tua email puoi seguire la prenotazione o chiederne la cancellazione
+          nella pagina <a href="prenotazione.html?c=${encodeURIComponent(b.code)}">La mia prenotazione</a>.</small></p>
         <p><strong>${esc(b.room_name)}</strong><br>${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}</p>
         <p>Hai pagato <strong>${euro(b.amount_paid)}</strong>${rest > 0.009
           ? `; il saldo di <strong>${euro(rest)}</strong> si paga all'arrivo.` : ': il soggiorno è saldato.'}</p>

@@ -14,6 +14,7 @@
       <a class="brand" href="./" data-c="titolo">Affittacamere</a>
       <nav class="site-nav">
         <a href="./#camere">Camere</a>
+        <a href="prenotazione.html">La mia prenotazione</a>
         <a href="./#contatti">Contatti</a>
       </nav>
     </div>
@@ -52,14 +53,12 @@
           <div class="stay" id="stay">Seleziona sul calendario il giorno di arrivo e quello di partenza.</div>
 
           <form id="req-form">
-            <label>Nome e cognome<input name="name" required maxlength="200" autocomplete="name"></label>
             <div class="row">
-              <label>Email<input name="email" type="email" maxlength="200" autocomplete="email"></label>
-              <label>Telefono<input name="phone" type="tel" maxlength="50" autocomplete="tel"></label>
+              <label>Email<input name="email" type="email" required maxlength="200" autocomplete="email"></label>
+              <label>Ospiti<select name="guests" id="guests"></select></label>
             </div>
-            <label>Ospiti<select name="guests" id="guests"></select></label>
-            <label>Messaggio (facoltativo)<textarea name="notes" maxlength="2000"></textarea></label>
-            <p class="privacy-note">Useremo i tuoi dati solo per gestire la richiesta e il soggiorno,
+            <label>Messaggio per la struttura (facoltativo)<textarea name="message" maxlength="2000"></textarea></label>
+            <p class="privacy-note">Conserviamo solo la tua email e il codice della prenotazione,
               come spiegato nell'<a href="privacy.html" target="_blank">informativa privacy</a>.</p>
 
             <div id="pay-box" hidden>

@@ -16,3 +16,7 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+# controlla da sola che chi chiama sia un amministratore
+[functions.users]
+verify_jwt = false

@@ -3,7 +3,7 @@
 // oppure dal cron del database con l'header x-cron-secret.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { parseIcs } from '../_shared/ical.ts';
-import { isAdminRequest } from '../_shared/admin.ts';
+import { hasRole } from '../_shared/admin.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +21,7 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
 async function authorized(req: Request): Promise<boolean> {
   const secret = Deno.env.get('CRON_SECRET');
   if (secret && req.headers.get('x-cron-secret') === secret) return true;
-  return isAdminRequest(db, req);
+  return hasRole(db, req, 'prenotazioni');
 }
 
 async function syncSource(src: { id: string; room_id: string; channel: string; url: string }) {

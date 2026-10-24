@@ -141,14 +141,7 @@ async function submitForm(e) {
   const out = document.getElementById('req-msg');
   if (!checkIn || !checkOut) return;
   const paying = e.submitter?.value === 'pay';
-  if (paying && !f.email.value.trim()) {
-    msg(out, 'Per pagare online inserisci la tua email: ti arriverà la ricevuta.', 'err');
-    return;
-  }
-  if (!f.email.value.trim() && !f.phone.value.trim()) {
-    msg(out, 'Inserisci almeno un contatto: email o telefono.', 'err');
-    return;
-  }
+  if (!f.email.reportValidity()) return;
   setButtons(false, false);
   msg(out, '');
 
@@ -156,8 +149,7 @@ async function submitForm(e) {
     const { data, error } = await sb.functions.invoke('payments', {
       body: {
         action: 'checkout', room_id: room.id, check_in: checkIn, check_out: checkOut,
-        name: f.name.value, email: f.email.value, phone: f.phone.value,
-        guests: Number(f.guests.value), notes: f.notes.value, mode: f.mode.value,
+        email: f.email.value, guests: Number(f.guests.value), message: f.message.value, mode: f.mode.value,
       },
     });
     if (error) {
@@ -170,17 +162,18 @@ async function submitForm(e) {
     return;
   }
 
-  const { error } = await sb.rpc('request_booking', {
+  const { data: code, error } = await sb.rpc('request_booking', {
     p_room: room.id, p_check_in: checkIn, p_check_out: checkOut,
-    p_name: f.name.value, p_email: f.email.value, p_phone: f.phone.value,
-    p_guests: Number(f.guests.value), p_notes: f.notes.value,
+    p_email: f.email.value, p_guests: Number(f.guests.value), p_message: f.message.value,
   });
   if (error) {
     msg(out, error.message, 'err');
     setButtons(true, !!quote?.online_payment);
     return;
   }
-  msg(out, 'Richiesta inviata! Ti ricontatteremo al più presto per confermare.', 'ok');
+  out.innerHTML = `<div class="msg ok">Richiesta inviata! Il tuo codice prenotazione è
+    <strong class="code">${esc(code)}</strong>: annotalo. Con il codice e la tua email puoi seguire
+    la richiesta nella pagina <a href="prenotazione.html?c=${encodeURIComponent(code)}">La mia prenotazione</a>.</div>`;
   f.reset();
   checkIn = checkOut = null;
   updateStay();

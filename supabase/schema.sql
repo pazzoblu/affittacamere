@@ -7,16 +7,63 @@
 create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------------
--- Amministratori: solo gli utenti presenti qui possono gestire il sito
+-- Utenti dell'area riservata e ruoli. Un utente può avere più ruoli:
+--   admin         fa tutto e gestisce gli utenti
+--   camere        anagrafica della struttura: camere, foto, testi del sito
+--   prenotazioni  calendario, prenotazioni, link di pagamento, calendari Booking/Airbnb
+--   prezzi        prezzi delle camere, stagioni, impostazioni dei pagamenti online
 -- ---------------------------------------------------------------------
-create table if not exists admins (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
+create table if not exists staff (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  email      text not null default '',
+  name       text not null default '',
+  roles      text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  constraint staff_roles_chk check (roles <@ array['admin','camere','prenotazioni','prezzi']::text[])
 );
+
+create or replace function is_staff() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from staff where user_id = auth.uid());
+$$;
+
+-- l'admin ha implicitamente tutti i ruoli
+create or replace function has_role(p_role text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from staff where user_id = auth.uid()
+                 and ('admin' = any(roles) or p_role = any(roles)));
+$$;
 
 create or replace function is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from admins where user_id = auth.uid());
+  select exists (select 1 from staff where user_id = auth.uid() and 'admin' = any(roles));
+$$;
+
+-- deve sempre restare almeno un amministratore
+create or replace function staff_keep_admin() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from staff where 'admin' = any(roles)) then
+    raise exception 'Deve restare almeno un amministratore';
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists staff_keep_admin on staff;
+create constraint trigger staff_keep_admin after update or delete on staff
+  deferrable initially deferred for each row execute function staff_keep_admin();
+
+-- aggiornamento dalla versione con la tabella "admins": i vecchi admin diventano amministratori
+do $$
+begin
+  if to_regclass('public.admins') is not null then
+    insert into staff(user_id, email, roles)
+      select a.user_id, coalesce(u.email, ''), array['admin']
+      from admins a join auth.users u on u.id = a.user_id
+    on conflict (user_id) do nothing;
+    drop table admins;
+  end if;
+end;
 $$;
 
 -- ---------------------------------------------------------------------
@@ -102,8 +149,17 @@ create table if not exists ical_sources (
 
 -- ---------------------------------------------------------------------
 -- Prenotazioni (dirette, richieste dal sito, importate dai portali)
--- check_out è il giorno di partenza (escluso dal soggiorno)
+-- check_out è il giorno di partenza (escluso dal soggiorno).
+-- Del cliente si conservano solo l'email e il codice prenotazione.
 -- ---------------------------------------------------------------------
+
+-- Codice prenotazione leggibile, senza caratteri ambigui (0/O, 1/I/L)
+create or replace function gen_booking_code() returns text
+language sql volatile as $$
+  select string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ23456789', 1 + floor(random() * 31)::int, 1), '')
+  from generate_series(1, 8);
+$$;
+
 create table if not exists bookings (
   id             uuid primary key default gen_random_uuid(),
   room_id        uuid not null references rooms(id) on delete cascade,
@@ -113,12 +169,10 @@ create table if not exists bookings (
                  check (status in ('richiesta','confermata','annullata')),
   source         text not null default 'diretta'
                  check (source in ('diretta','sito','booking','airbnb','altro')),
-  guest_name     text not null default '',
   guest_email    text not null default '',
-  guest_phone    text not null default '',
   guests         int,
   price          numeric(10,2),  -- prezzo totale del soggiorno
-  notes          text not null default '',
+  notes          text not null default '',  -- note interne dello staff
   ical_source_id uuid references ical_sources(id) on delete cascade,
   external_uid   text,
   created_at     timestamptz not null default now(),
@@ -126,6 +180,15 @@ create table if not exists bookings (
   constraint bookings_external_uq unique (ical_source_id, external_uid)
 );
 create index if not exists bookings_room_dates_idx on bookings(room_id, check_in, check_out);
+
+alter table bookings add column if not exists code text not null default gen_booking_code();
+create unique index if not exists bookings_code_uq on bookings(code);
+alter table bookings add column if not exists cancel_requested_at timestamptz;
+-- messaggio del cliente durante un pagamento online: passa nelle notifiche a pagamento concluso
+alter table bookings add column if not exists pending_message text;
+-- dalla versione precedente: nome e telefono del cliente non si conservano più
+alter table bookings drop column if exists guest_name;
+alter table bookings drop column if exists guest_phone;
 
 -- Pagamenti: quanto è stato incassato e, per i pagamenti online in corso,
 -- fino a quando le date restano bloccate in attesa che l'ospite paghi
@@ -152,6 +215,18 @@ create table if not exists payments (
   paid_at               timestamptz
 );
 create index if not exists payments_booking_idx on payments(booking_id);
+
+-- Notifiche per lo staff: richieste, pagamenti, cancellazioni e messaggi dei clienti.
+-- Le scrivono solo le funzioni del database; le leggono admin e ruolo "prenotazioni".
+create table if not exists notifications (
+  id         uuid primary key default gen_random_uuid(),
+  booking_id uuid references bookings(id) on delete cascade,
+  kind       text not null check (kind in ('richiesta','pagamento','cancellazione','messaggio')),
+  message    text not null default '',
+  read_at    timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists notifications_created_idx on notifications(created_at desc);
 
 -- ---------------------------------------------------------------------
 -- Disponibilità e prezzi
@@ -257,9 +332,9 @@ end;
 $$;
 
 -- Controlli comuni a richieste e prenotazioni online
+drop function if exists validate_site_booking(uuid, date, date, text, text, text, int);
 create or replace function validate_site_booking(
-  p_room uuid, p_check_in date, p_check_out date,
-  p_name text, p_email text, p_phone text, p_guests int
+  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int
 ) returns void
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -278,8 +353,8 @@ begin
   if p_check_out - p_check_in < v_room.min_nights then
     raise exception 'Per questa camera il soggiorno minimo è di % notti', v_room.min_nights;
   end if;
-  if coalesce(trim(p_name), '') = '' or (coalesce(trim(p_email), '') = '' and coalesce(trim(p_phone), '') = '') then
-    raise exception 'Inserisci nome e almeno un contatto (email o telefono)';
+  if coalesce(trim(p_email), '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+    raise exception 'Inserisci un indirizzo email valido';
   end if;
   if p_guests is not null and (p_guests < 1 or p_guests > v_room.capacity) then
     raise exception 'Numero ospiti non valido per questa camera (max %)', v_room.capacity;
@@ -294,34 +369,108 @@ begin
 end;
 $$;
 
--- Richiesta di prenotazione dal sito: entra come "richiesta", la confermi tu
+create or replace function notify_staff(p_booking uuid, p_kind text, p_message text)
+returns void
+language sql security definer set search_path = public as $$
+  insert into notifications(booking_id, kind, message) values (p_booking, p_kind, left(coalesce(trim(p_message), ''), 2000));
+$$;
+
+-- Richiesta di prenotazione dal sito: entra come "richiesta", la confermi tu.
+-- Restituisce il codice prenotazione da comunicare al cliente.
+drop function if exists request_booking(uuid, date, date, text, text, text, int, text);
 create or replace function request_booking(
-  p_room uuid, p_check_in date, p_check_out date,
-  p_name text, p_email text, p_phone text, p_guests int, p_notes text
-) returns uuid
+  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text
+) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   v_id uuid;
+  v_code text;
 begin
-  perform validate_site_booking(p_room, p_check_in, p_check_out, p_name, p_email, p_phone, p_guests);
-  insert into bookings(room_id, check_in, check_out, status, source, price,
-                       guest_name, guest_email, guest_phone, guests, notes)
+  perform validate_site_booking(p_room, p_check_in, p_check_out, p_email, p_guests);
+  insert into bookings(room_id, check_in, check_out, status, source, price, guest_email, guests)
   values (p_room, p_check_in, p_check_out, 'richiesta', 'sito', quote_price(p_room, p_check_in, p_check_out),
-          left(trim(p_name), 200), left(trim(coalesce(p_email,'')), 200),
-          left(trim(coalesce(p_phone,'')), 50), p_guests, left(coalesce(p_notes,''), 2000))
-  returning id into v_id;
-  return v_id;
+          lower(left(trim(p_email), 200)), p_guests)
+  returning id, code into v_id, v_code;
+  perform notify_staff(v_id, 'richiesta', p_message);
+  return v_code;
 end;
 $$;
 
 -- Stato di una prenotazione per la pagina di esito del pagamento (l'id è un uuid non indovinabile)
+drop function if exists booking_public_status(uuid);
 create or replace function booking_public_status(p_id uuid)
-returns table(status text, payment_status text, amount_paid numeric, price numeric,
+returns table(code text, status text, payment_status text, amount_paid numeric, price numeric,
               check_in date, check_out date, room_name text, room_slug text)
 language sql stable security definer set search_path = public as $$
-  select b.status, b.payment_status, b.amount_paid, b.price, b.check_in, b.check_out, r.name, r.slug
+  select b.code, b.status, b.payment_status, b.amount_paid, b.price, b.check_in, b.check_out, r.name, r.slug
   from bookings b join rooms r on r.id = b.room_id
   where b.id = p_id and b.source = 'sito';
+$$;
+
+-- "La mia prenotazione": il cliente la ritrova con codice + email
+create or replace function booking_lookup(p_code text, p_email text)
+returns table(code text, status text, payment_status text, amount_paid numeric, price numeric,
+              check_in date, check_out date, guests int, room_name text, room_slug text,
+              cancel_requested_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select b.code, b.status, b.payment_status, b.amount_paid, b.price, b.check_in, b.check_out, b.guests,
+         r.name, r.slug, b.cancel_requested_at
+  from bookings b join rooms r on r.id = b.room_id
+  where b.code = upper(trim(p_code)) and b.guest_email <> '' and b.guest_email = lower(trim(p_email))
+    -- le prenotazioni online mai pagate non esistono per il cliente
+    and not (b.payment_status = 'in_attesa' and b.status = 'annullata');
+$$;
+
+-- Trova la prenotazione del cliente o dà errore; limita i messaggi a 10 al giorno
+create or replace function guest_booking_id(p_code text, p_email text)
+returns uuid
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_id uuid;
+begin
+  select id into v_id from bookings
+  where code = upper(trim(p_code)) and guest_email <> '' and guest_email = lower(trim(p_email));
+  if v_id is null then
+    raise exception 'Prenotazione non trovata: controlla codice ed email';
+  end if;
+  if (select count(*) from notifications where booking_id = v_id and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'Hai inviato troppi messaggi oggi: riprova domani o contattaci direttamente';
+  end if;
+  return v_id;
+end;
+$$;
+
+create or replace function request_cancellation(p_code text, p_email text, p_message text)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid := guest_booking_id(p_code, p_email);
+  v_b bookings%rowtype;
+begin
+  select * into v_b from bookings where id = v_id;
+  if v_b.status = 'annullata' then
+    raise exception 'La prenotazione è già annullata';
+  end if;
+  if v_b.check_in < current_date then
+    raise exception 'Il soggiorno è già iniziato: contattaci direttamente';
+  end if;
+  if v_b.cancel_requested_at is not null then
+    raise exception 'Hai già richiesto la cancellazione: ti risponderemo al più presto';
+  end if;
+  update bookings set cancel_requested_at = now() where id = v_id;
+  perform notify_staff(v_id, 'cancellazione', p_message);
+end;
+$$;
+
+create or replace function send_guest_message(p_code text, p_email text, p_message text)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(trim(p_message), '') = '' then
+    raise exception 'Scrivi il messaggio';
+  end if;
+  perform notify_staff(guest_booking_id(p_code, p_email), 'messaggio', p_message);
+end;
 $$;
 
 -- ---------------------------------------------------------------------
@@ -329,23 +478,21 @@ $$;
 -- ---------------------------------------------------------------------
 
 -- Prenotazione online: blocca le date per 35 minuti in attesa del pagamento
+drop function if exists create_online_booking(uuid, date, date, text, text, text, int, text, text);
 create or replace function create_online_booking(
-  p_room uuid, p_check_in date, p_check_out date,
-  p_name text, p_email text, p_phone text, p_guests int, p_notes text, p_mode text
-) returns table(booking_id uuid, room_name text, total numeric, amount numeric)
+  p_room uuid, p_check_in date, p_check_out date, p_email text, p_guests int, p_message text, p_mode text
+) returns table(booking_id uuid, code text, room_name text, total numeric, amount numeric)
 language plpgsql security definer set search_path = public as $$
 declare
   v_quote record;
   v_id uuid;
+  v_code text;
   v_amount numeric;
 begin
   if p_mode not in ('acconto', 'totale') then
     raise exception 'Modalità di pagamento non valida';
   end if;
-  if coalesce(trim(p_email), '') = '' then
-    raise exception 'Per pagare online serve l''email';
-  end if;
-  perform validate_site_booking(p_room, p_check_in, p_check_out, p_name, p_email, p_phone, p_guests);
+  perform validate_site_booking(p_room, p_check_in, p_check_out, p_email, p_guests);
   select * into v_quote from quote_booking(p_room, p_check_in, p_check_out);
   if not v_quote.online_payment then
     raise exception 'Pagamento online non disponibile per queste date: invia una richiesta';
@@ -353,13 +500,12 @@ begin
   v_amount := case when p_mode = 'totale' then v_quote.total else v_quote.deposit end;
 
   insert into bookings(room_id, check_in, check_out, status, source, price, payment_status, expires_at,
-                       guest_name, guest_email, guest_phone, guests, notes)
+                       guest_email, guests, pending_message)
   values (p_room, p_check_in, p_check_out, 'richiesta', 'sito', v_quote.total, 'in_attesa', now() + interval '35 minutes',
-          left(trim(p_name), 200), left(trim(p_email), 200),
-          left(trim(coalesce(p_phone,'')), 50), p_guests, left(coalesce(p_notes,''), 2000))
-  returning id into v_id;
+          lower(left(trim(p_email), 200)), p_guests, nullif(left(coalesce(trim(p_message), ''), 2000), ''))
+  returning id, bookings.code into v_id, v_code;
 
-  return query select v_id, (select name from rooms where id = p_room), v_quote.total, v_amount;
+  return query select v_id, v_code, (select name from rooms where id = p_room), v_quote.total, v_amount;
 end;
 $$;
 
@@ -381,9 +527,10 @@ begin
   select * into v_b from bookings where id = v_pay.booking_id for update;
   v_paid := v_b.amount_paid + v_pay.amount;
   update bookings set
-    amount_paid    = v_paid,
-    payment_status = case when v_paid >= coalesce(price, 0) then 'pagato' else 'acconto' end,
-    expires_at     = null,
+    amount_paid     = v_paid,
+    payment_status  = case when v_paid >= coalesce(price, 0) then 'pagato' else 'acconto' end,
+    expires_at      = null,
+    pending_message = null,
     status = case
       when status = 'richiesta' then 'confermata'
       -- caso raro: annullata mentre l'ospite pagava; si riattiva solo se la camera è ancora libera
@@ -394,6 +541,10 @@ begin
       then trim(notes || E'\nATTENZIONE: pagamento ricevuto su prenotazione annullata, camera non più libera: verificare o rimborsare.')
       else notes end
   where id = v_b.id;
+
+  perform notify_staff(v_b.id, 'pagamento',
+    format('Pagamento online di %s € ricevuto.', replace(to_char(v_pay.amount, 'FM9999990.00'), '.', ','))
+    || coalesce(E'\n\nMessaggio del cliente: ' || v_b.pending_message, ''));
 end;
 $$;
 
@@ -410,7 +561,7 @@ begin
   end if;
   update payments set status = 'scaduto' where id = v_pay.id;
   if v_pay.kind in ('acconto', 'totale') then
-    update bookings set status = 'annullata', payment_status = 'nessuno', expires_at = null
+    update bookings set status = 'annullata', payment_status = 'nessuno', expires_at = null, pending_message = null
     where id = v_pay.booking_id and status = 'richiesta' and amount_paid = 0;
   end if;
 end;
@@ -419,19 +570,66 @@ $$;
 revoke execute on function quote_price(uuid, date, date) from public, anon;
 grant execute on function quote_price(uuid, date, date) to authenticated;  -- "calcola dai listini" nell admin
 revoke execute on function room_is_free(uuid, date, date, uuid) from public, anon, authenticated;
-revoke execute on function validate_site_booking(uuid, date, date, text, text, text, int) from public, anon, authenticated;
-revoke execute on function create_online_booking(uuid, date, date, text, text, text, int, text, text) from public, anon, authenticated;
+revoke execute on function validate_site_booking(uuid, date, date, text, int) from public, anon, authenticated;
+revoke execute on function notify_staff(uuid, text, text) from public, anon, authenticated;
+revoke execute on function guest_booking_id(text, text) from public, anon, authenticated;
+revoke execute on function create_online_booking(uuid, date, date, text, int, text, text) from public, anon, authenticated;
 revoke execute on function register_payment(text, text) from public, anon, authenticated;
 revoke execute on function expire_payment(text) from public, anon, authenticated;
 grant execute on function room_busy_ranges(uuid, date, date) to anon, authenticated;
 grant execute on function quote_booking(uuid, date, date) to anon, authenticated;
-grant execute on function request_booking(uuid, date, date, text, text, text, int, text) to anon, authenticated;
+grant execute on function request_booking(uuid, date, date, text, int, text) to anon, authenticated;
 grant execute on function booking_public_status(uuid) to anon, authenticated;
+grant execute on function booking_lookup(text, text) to anon, authenticated;
+grant execute on function request_cancellation(text, text, text) to anon, authenticated;
+grant execute on function send_guest_message(text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Permessi per colonna sulle camere: i prezzi li cambia solo chi ha il
+-- ruolo "prezzi", il resto dell'anagrafica solo chi ha il ruolo "camere".
+-- Dal SQL Editor (nessun utente collegato) non ci sono limiti.
+-- ---------------------------------------------------------------------
+create or replace function rooms_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if not has_role('camere') then
+      raise exception 'Non hai i permessi per aggiungere camere';
+    end if;
+    if not has_role('prezzi') and (new.price_from is not null or new.price_weekend is not null or new.min_nights <> 1) then
+      raise exception 'Non hai i permessi per impostare i prezzi';
+    end if;
+  else
+    if (new.price_from, new.price_weekend, new.min_nights) is distinct from (old.price_from, old.price_weekend, old.min_nights)
+       and not has_role('prezzi') then
+      raise exception 'Non hai i permessi per modificare i prezzi';
+    end if;
+    if (new.slug, new.name, new.short_description, new.description, new.capacity, new.amenities, new.sort_order, new.published)
+       is distinct from (old.slug, old.name, old.short_description, old.description, old.capacity, old.amenities, old.sort_order, old.published)
+       and not has_role('camere') then
+      raise exception 'Non hai i permessi per modificare i dati della camera';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists rooms_guard on rooms;
+create trigger rooms_guard before insert or update on rooms
+  for each row execute function rooms_guard();
+
+-- Impostazioni dei pagamenti (ruolo "prezzi"); le altre chiavi sono testi del sito (ruolo "camere")
+create or replace function is_payment_setting(p_key text) returns boolean
+language sql immutable as $$
+  select p_key in ('pagamenti_attivi', 'acconto_percentuale', 'condizioni_cancellazione');
+$$;
 
 -- ---------------------------------------------------------------------
 -- Row Level Security
 -- ---------------------------------------------------------------------
-alter table admins        enable row level security;
+alter table staff         enable row level security;
 alter table rooms         enable row level security;
 alter table room_photos   enable row level security;
 alter table season_prices enable row level security;
@@ -440,37 +638,68 @@ alter table ical_sources  enable row level security;
 alter table bookings      enable row level security;
 alter table payments      enable row level security;
 
-drop policy if exists admins_self on admins;
-create policy admins_self on admins for select using (user_id = auth.uid());
+-- ognuno vede il proprio profilo; l'admin vede e modifica tutti (creazione ed
+-- eliminazione degli utenti passano dalla funzione "users")
+drop policy if exists staff_read on staff;
+create policy staff_read on staff for select using (user_id = auth.uid() or is_admin());
+drop policy if exists staff_admin_update on staff;
+create policy staff_admin_update on staff for update using (is_admin()) with check (is_admin());
+
+-- policy della versione precedente (solo admin)
+drop policy if exists rooms_admin_write on rooms;
+drop policy if exists photos_admin_write on room_photos;
+drop policy if exists seasons_admin_all on season_prices;
+drop policy if exists content_admin_write on site_content;
+drop policy if exists ical_admin_all on ical_sources;
+drop policy if exists bookings_admin_all on bookings;
+drop policy if exists payments_admin_read on payments;
 
 drop policy if exists rooms_public_read on rooms;
-create policy rooms_public_read on rooms for select using (published or is_admin());
-drop policy if exists rooms_admin_write on rooms;
-create policy rooms_admin_write on rooms for all using (is_admin()) with check (is_admin());
+create policy rooms_public_read on rooms for select using (published or is_staff());
+drop policy if exists rooms_insert on rooms;
+create policy rooms_insert on rooms for insert with check (has_role('camere'));
+drop policy if exists rooms_update on rooms;
+create policy rooms_update on rooms for update
+  using (has_role('camere') or has_role('prezzi')) with check (has_role('camere') or has_role('prezzi'));
+drop policy if exists rooms_delete on rooms;
+create policy rooms_delete on rooms for delete using (has_role('camere'));
 
 drop policy if exists photos_public_read on room_photos;
 create policy photos_public_read on room_photos for select
-  using (is_admin() or exists (select 1 from rooms r where r.id = room_id and r.published));
-drop policy if exists photos_admin_write on room_photos;
-create policy photos_admin_write on room_photos for all using (is_admin()) with check (is_admin());
+  using (is_staff() or exists (select 1 from rooms r where r.id = room_id and r.published));
+drop policy if exists photos_write on room_photos;
+create policy photos_write on room_photos for all using (has_role('camere')) with check (has_role('camere'));
 
-drop policy if exists seasons_admin_all on season_prices;
-create policy seasons_admin_all on season_prices for all using (is_admin()) with check (is_admin());
+drop policy if exists seasons_read on season_prices;
+create policy seasons_read on season_prices for select using (is_staff());
+drop policy if exists seasons_write on season_prices;
+create policy seasons_write on season_prices for all using (has_role('prezzi')) with check (has_role('prezzi'));
 
 drop policy if exists content_public_read on site_content;
 create policy content_public_read on site_content for select using (true);
-drop policy if exists content_admin_write on site_content;
-create policy content_admin_write on site_content for all using (is_admin()) with check (is_admin());
+drop policy if exists content_write on site_content;
+create policy content_write on site_content for all
+  using (case when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end)
+  with check (case when is_payment_setting(key) then has_role('prezzi') else has_role('camere') end);
 
-drop policy if exists ical_admin_all on ical_sources;
-create policy ical_admin_all on ical_sources for all using (is_admin()) with check (is_admin());
+drop policy if exists ical_all on ical_sources;
+create policy ical_all on ical_sources for all using (has_role('prenotazioni')) with check (has_role('prenotazioni'));
 
-drop policy if exists bookings_admin_all on bookings;
-create policy bookings_admin_all on bookings for all using (is_admin()) with check (is_admin());
+drop policy if exists bookings_all on bookings;
+create policy bookings_all on bookings for all using (has_role('prenotazioni')) with check (has_role('prenotazioni'));
 
--- i pagamenti li scrivono solo le Edge Functions; l'admin li legge
-drop policy if exists payments_admin_read on payments;
-create policy payments_admin_read on payments for select using (is_admin());
+-- i pagamenti li scrivono solo le Edge Functions; chi gestisce le prenotazioni li legge
+drop policy if exists payments_read on payments;
+create policy payments_read on payments for select using (has_role('prenotazioni'));
+
+-- notifiche: lette, segnate come lette ed eliminate da admin e ruolo "prenotazioni"
+alter table notifications enable row level security;
+drop policy if exists notifications_read on notifications;
+create policy notifications_read on notifications for select using (has_role('prenotazioni'));
+drop policy if exists notifications_update on notifications;
+create policy notifications_update on notifications for update using (has_role('prenotazioni')) with check (has_role('prenotazioni'));
+drop policy if exists notifications_delete on notifications;
+create policy notifications_delete on notifications for delete using (has_role('prenotazioni'));
 
 -- Il token iCal non deve essere leggibile dalla vetrina
 revoke select on rooms from anon;
@@ -478,7 +707,7 @@ grant select (id, slug, name, short_description, description, capacity, price_fr
               min_nights, amenities, sort_order, published, created_at) on rooms to anon;
 
 -- ---------------------------------------------------------------------
--- Storage: bucket pubblico "photos" per le immagini
+-- Storage: bucket pubblico "photos" per le immagini (camere e copertina)
 -- ---------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('photos', 'photos', true)
@@ -486,10 +715,10 @@ on conflict (id) do nothing;
 
 drop policy if exists photos_bucket_admin_insert on storage.objects;
 create policy photos_bucket_admin_insert on storage.objects for insert
-  with check (bucket_id = 'photos' and public.is_admin());
+  with check (bucket_id = 'photos' and public.has_role('camere'));
 drop policy if exists photos_bucket_admin_update on storage.objects;
 create policy photos_bucket_admin_update on storage.objects for update
-  using (bucket_id = 'photos' and public.is_admin());
+  using (bucket_id = 'photos' and public.has_role('camere'));
 drop policy if exists photos_bucket_admin_delete on storage.objects;
 create policy photos_bucket_admin_delete on storage.objects for delete
-  using (bucket_id = 'photos' and public.is_admin());
+  using (bucket_id = 'photos' and public.has_role('camere'));

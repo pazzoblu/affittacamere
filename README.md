@@ -1,7 +1,8 @@
 # AffittaCamere
 
 Sito per un affittacamere: **vetrina pubblica** (camere, foto, disponibilità, richieste di prenotazione)
-e **area di gestione** (calendario, prenotazioni, camere e foto, testi, sincronizzazione con Booking/Airbnb).
+e **area di gestione** (calendario, prenotazioni, messaggi dei clienti, camere e foto, prezzi, testi, utenti con ruoli,
+sincronizzazione con Booking/Airbnb). Dei clienti si conservano solo **email e codice prenotazione**.
 
 - Frontend statico in `docs/` (HTML + JavaScript, nessuna compilazione) → GitHub Pages
 - Dati, login e foto su **Supabase** (piano gratuito)
@@ -13,6 +14,7 @@ docs/                 sito pubblicato
   index.html          home: camere, chi siamo, contatti
   camera.html         scheda camera: galleria, calendario, prezzo, pagamento o richiesta
   pagamento.html      esito del pagamento
+  prenotazione.html   "La mia prenotazione": stato, messaggi e richiesta di cancellazione con codice + email
   privacy.html        informativa privacy (GDPR)
   admin/              area riservata (login Supabase)
   js/config.js        URL e chiave del progetto Supabase  ← da compilare
@@ -20,7 +22,8 @@ supabase/
   schema.sql          tabelle, policy di sicurezza, bucket foto
   cron.sql            sincronizzazione automatica ogni 20 minuti
   functions/          ical-import (portali → sito), ical-export (sito → portali),
-                      payments (Stripe Checkout e link), stripe-webhook (conferma pagamenti)
+                      payments (Stripe Checkout e link), stripe-webhook (conferma pagamenti),
+                      users (gestione utenti dell'area riservata, solo amministratori)
 tests/
   *.test.ts           test di iCal e Stripe (firma webhook, parametri)
   dev/                anteprima locale con dati finti
@@ -34,7 +37,9 @@ Non serve Supabase: un finto database nel browser simula tutto.
 node tests/dev/server.mjs
 ```
 
-Apri http://localhost:8080 (area riservata: http://localhost:8080/admin/, va bene qualsiasi email e password).
+Apri http://localhost:8080. Area riservata: http://localhost:8080/admin/ con una qualsiasi password e una di queste email,
+per provare i diversi ruoli: `admin@demo.test`, `camere@demo.test`, `prenotazioni@demo.test`, `prezzi@demo.test`.
+Per "La mia prenotazione" c'è la prenotazione demo `DEMO2345` con email `cliente@example.com`.
 In demo i pagamenti sono simulati: "Paga e prenota" conferma subito senza passare da Stripe.
 I dati demo restano nel browser; per ripartire da zero svuota il localStorage del sito.
 
@@ -45,10 +50,23 @@ I dati demo restano nel browser; per ripartire da zero svuota il localStorage de
 2. **SQL Editor** → incolla ed esegui `supabase/schema.sql`.
 3. **Authentication → Users → Add user**: crea il tuo utente (email + password).
 4. **Authentication → Sign In / Providers**: disattiva *Allow new users to sign up*.
-5. Rendi amministratore il tuo utente (l'id è nella lista utenti):
+5. Rendi amministratore il tuo utente:
    ```sql
-   insert into admins(user_id) values ('ID-DEL-TUO-UTENTE');
+   insert into staff(user_id, email, roles)
+   select id, email, '{admin}' from auth.users where email = 'la-tua-email@esempio.it';
    ```
+6. Pubblica la funzione per gestire gli altri utenti dall'area riservata (scheda **Utenti**):
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref IL-TUO-PROJECT-REF
+   npx supabase functions deploy users
+   ```
+   In alternativa: Dashboard → **Edge Functions → Deploy a new function → Via editor**, nome `users`,
+   incolla `supabase/functions/users/index.ts` e disattiva *Verify JWT* (la funzione controlla da sola che chi chiama sia admin).
+
+**Aggiornare un progetto esistente**: riesegui `supabase/schema.sql` nel SQL Editor. È rieseguibile e porta
+le modifiche (dalla versione con la tabella `admins`: gli admin diventano utenti con ruolo Amministratore,
+nome e telefono dei clienti vengono eliminati).
 
 ### 2. Collega il sito
 In **Project Settings → API** copia *Project URL* e *anon public key* in `docs/js/config.js`.
@@ -113,6 +131,17 @@ presa all'ultimo minuto può ancora sovrapporsi. Il calendario admin evidenzia i
 
 ## Come funziona
 
+- **Ruoli** (un utente può averne più d'uno; li assegna l'amministratore nella scheda Utenti):
+  - *Amministratore*: tutto, compresa la gestione degli utenti;
+  - *Camere*: anagrafica delle camere, foto e testi del sito;
+  - *Prenotazioni*: calendario, prenotazioni, messaggi dei clienti, link di pagamento, Booking/Airbnb;
+  - *Prezzi*: prezzi delle camere, stagioni, impostazioni dei pagamenti online.
+  I permessi sono imposti dal database (policy RLS e trigger), non solo nascosti nell'interfaccia.
+- **Clienti**: nessun account. Ricevono un codice prenotazione e, con codice + email, nella pagina
+  *La mia prenotazione* vedono lo stato, scrivono alla struttura e possono chiedere la cancellazione.
+- **Notifiche**: richieste, pagamenti, cancellazioni e messaggi arrivano nella scheda *Messaggi* (admin e ruolo
+  Prenotazioni). Le notifiche via email richiederanno un servizio di invio (es. Resend) da collegare in seguito.
+
 - **Prenotazioni**: `check_out` è il giorno di partenza (escluso). Stati: *richiesta* (dal sito, da confermare),
   *confermata* (blocca la camera), *annullata*. Le richieste non bloccano il calendario finché non le confermi,
   tranne durante un pagamento online in corso (35 minuti).
@@ -120,7 +149,7 @@ presa all'ultimo minuto può ancora sovrapporsi. Il calendario admin evidenzia i
   le notti di venerdì e sabato usano il prezzo weekend. Il calcolo avviene nel database (`quote_price`),
   quindi l'importo pagato non è manipolabile dal browser.
 - **Sicurezza**: la vetrina usa solo la chiave pubblica; le policy RLS permettono di leggere camere, foto e testi,
-  di vedere i giorni occupati (senza dati personali) e di inviare richieste. Tutto il resto è solo per gli utenti in `admins`.
+  di vedere i giorni occupati (senza dati personali), di inviare richieste e di consultare la propria prenotazione con codice + email. Tutto il resto è riservato allo staff, secondo il ruolo.
 - **Foto**: ridimensionate nel browser a max 1920 px prima del caricamento, salvate nel bucket pubblico `photos`.
 - **Import iCal**: aggiorna le prenotazioni attuali e future del portale, elimina quelle sparite dal feed
   (annullate sul portale); quelle passate restano come storico.
