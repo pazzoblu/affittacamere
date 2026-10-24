@@ -1,0 +1,18 @@
+# Configurazione minima per il deploy delle Edge Functions con la CLI Supabase.
+# Entrambe le funzioni controllano da sole chi le chiama:
+# - ical-export è pubblica (la leggono Booking/Airbnb), protetta dal token segreto della camera
+# - ical-import accetta solo un utente admin o il cron con l'header x-cron-secret
+# - payments è usata dalla vetrina (azioni pubbliche validate nel database) e dall'admin (link)
+# - stripe-webhook accetta solo eventi firmati da Stripe
+
+[functions.ical-export]
+verify_jwt = false
+
+[functions.ical-import]
+verify_jwt = false
+
+[functions.payments]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
