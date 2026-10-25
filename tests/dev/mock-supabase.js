@@ -2,13 +2,13 @@
 // Lo usa solo tests/dev/server.mjs: non viene mai pubblicato.
 // Login demo: qualsiasi password; l'email sceglie l'utente (admin@, camere@, prenotazioni@, prezzi@demo.test).
 
-const KEY = 'affittacamere-demo-db-v5';
+const KEY = 'affittacamere-demo-db-v6';
 
 // Testi di prova della casa di Pacentro (gli stessi di contenuti/testi-pacentro.md)
 const PACENTRO = {
-  titolo: 'Casa vacanze a Pacentro',
+  titolo: 'Dimora San Francesco',
   sottotitolo: 'Tranquillità, ambienti curati e la bellezza di uno dei borghi più belli d’Italia',
-  chiSiamo: `Ti accogliamo nella nostra casa nel centro storico di Pacentro, borgo medievale nel Parco Nazionale della Majella, tra i Borghi più belli d’Italia.
+  chiSiamo: `Ti accogliamo alla Dimora San Francesco, la nostra casa nel centro storico di Pacentro, borgo medievale nel Parco Nazionale della Majella, tra i Borghi più belli d’Italia.
 
 Ci teniamo che tu ti senta a casa: ogni ambiente viene pulito con cura prima di ogni arrivo e la biancheria è sempre fresca e in ordine.
 
