@@ -2,7 +2,7 @@
 // Lo usa solo tests/dev/server.mjs: non viene mai pubblicato.
 // Login demo: qualsiasi password; l'email sceglie l'utente (admin@, camere@, prenotazioni@, prezzi@demo.test).
 
-const KEY = 'affittacamere-demo-db-v6';
+const KEY = 'affittacamere-demo-db-v7';
 
 // Testi di prova della casa di Pacentro (gli stessi di contenuti/testi-pacentro.md)
 const PACENTRO = {
@@ -75,8 +75,8 @@ function seed() {
     ].map(([key, value]) => ({ key, value })),
     rooms: [
       { id: r1, slug: 'casa-nel-borgo', name: 'Casa nel borgo', short_description: PACENTRO.breve,
-        description: PACENTRO.descrizione, capacity: 2, price_from: 70,
-        price_weekend: 90, min_nights: 1, cin: 'IT066066C2DEMO0001', cir: '', amenities: PACENTRO.servizi, sort_order: 0, published: true, ical_token: uuid() },
+        description: PACENTRO.descrizione, capacity: 2, price_from: 135,
+        price_weekend: null, min_nights: 1, discount_week: 15, discount_month: 30, cin: 'IT066066C2DEMO0001', cir: '', amenities: PACENTRO.servizi, sort_order: 0, published: true, ical_token: uuid() },
       // altri alloggi di esempio, non pubblicati (per provare la home con più case basta pubblicarli)
       { id: r2, slug: 'camera-verde', name: 'Camera Verde', short_description: 'Tripla luminosa',
         description: 'Camera tripla.', capacity: 3, price_from: 85, price_weekend: null, min_nights: 2, amenities: ['Wi-Fi', 'TV'],
@@ -170,9 +170,19 @@ class Query {
   }
 }
 
-// stessa logica di quote_price nel database
+// stessa logica di quote_price_base / stay_discount / quote_price nel database
 function nextDay(d) { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + 1); return iso(x); }
+function stayDiscount(roomId, from, to) {
+  const r = db.rooms.find(x => x.id === roomId);
+  const n = Math.round((new Date(to) - new Date(from)) / 86400000);
+  if (n >= 28 && Number(r.discount_month) > 0) return Number(r.discount_month);
+  return n >= 7 ? Number(r.discount_week ?? 0) : 0;
+}
 function quotePrice(roomId, from, to) {
+  const base = quotePriceBase(roomId, from, to);
+  return base == null ? null : Math.round(base * (100 - stayDiscount(roomId, from, to))) / 100;
+}
+function quotePriceBase(roomId, from, to) {
   const room = db.rooms.find(r => r.id === roomId);
   let total = 0;
   for (let d = from; d < to; d = nextDay(d)) {
@@ -239,7 +249,9 @@ export function createClient() {
         const pct = Number(content('acconto_percentuale')) || 30;
         return { data: [{ total, deposit: total == null ? null : Math.round(total * pct) / 100, deposit_percent: pct,
           available: isFree(a.p_room, a.p_check_in, a.p_check_out),
-          online_payment: content('pagamenti_attivi') === '1' && total > 0 }], error: null };
+          online_payment: content('pagamenti_attivi') === '1' && total > 0,
+          full_total: quotePriceBase(a.p_room, a.p_check_in, a.p_check_out),
+          discount_percent: stayDiscount(a.p_room, a.p_check_in, a.p_check_out) }], error: null };
       }
       if (fn === 'booking_public_status') {
         const b = db.bookings.find(x => x.id === a.p_id);

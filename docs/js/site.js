@@ -1,4 +1,6 @@
-import { sb, configured, esc, paragraphs, photoUrl, euro, loadContent, notConfiguredMessage, ROOM_PUBLIC_COLS } from './common.js';
+import {
+  sb, configured, esc, paragraphs, photoUrl, euro, loadContent, notConfiguredMessage, ROOM_PUBLIC_COLS, discountText,
+} from './common.js';
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -55,6 +57,7 @@ async function loadRooms() {
           <div class="meta">
             <span>${guests(r)}${r.min_nights > 1 ? ` · minimo ${r.min_nights} notti` : ''}</span>${price(r)}
           </div>
+          ${discountText(r) ? `<div><span class="feature-discounts">Soggiorni lunghi: ${esc(discountText(r))}</span></div>` : ''}
           ${r.amenities.length ? `<ul class="chips">${r.amenities.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}
           <a class="btn" href="${link(r)}">Foto, disponibilità e prenotazione</a>
         </div>
@@ -78,7 +81,7 @@ async function loadRooms() {
           <h3>${esc(r.name)}</h3>
           <p>${esc(r.short_description)}</p>
           <div class="meta">
-            <span>${guests(r)}</span>
+            <span>${guests(r)}${discountText(r) ? `<br><span class="discount-tag">${esc(discountText(r))}</span>` : ''}</span>
             ${price(r)}
           </div>
         </div>

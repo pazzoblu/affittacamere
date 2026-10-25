@@ -202,6 +202,11 @@ footer .legal-line .sep { opacity: .5; }
 .terms-check { display: flex; gap: 8px; align-items: flex-start; color: var(--text); font-size: .88rem; margin: 6px 0 12px; }
 .terms-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
 .room-codes { font-size: .85rem; color: var(--muted); margin-top: 6px; }
+.room-discounts, .feature-discounts { display: inline-block; margin-top: 10px; background: #e6f4ea; color: var(--ok);
+  border-radius: 999px; padding: 4px 14px; font-size: .9rem; font-weight: 600; }
+.room-discounts[hidden] { display: none; }
+.stay .discount { display: block; font-size: .88rem; color: var(--ok); }
+.room-card .discount-tag { font-size: .82rem; color: var(--ok); font-weight: 600; }
 
 /* Pulsante menu e barra di prenotazione: compaiono solo su schermi stretti */
 .menu-toggle { display: none; }

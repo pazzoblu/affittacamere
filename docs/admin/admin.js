@@ -476,7 +476,10 @@ async function renderRoomEditor(r) {
           <label>Prezzo base a notte (€)<input name="price_from" type="number" min="0" step="0.01" value="${r.price_from ?? ''}"></label>
           <label>Prezzo notti di venerdì e sabato (€, vuoto = base)<input name="price_weekend" type="number" min="0" step="0.01" value="${r.price_weekend ?? ''}"></label>
           <label>Soggiorno minimo (notti)<input name="min_nights" type="number" min="1" required value="${r.min_nights ?? 1}"></label>
+          <label>Sconto da 7 notti (%)<input name="discount_week" type="number" min="0" max="90" step="0.5" value="${Number(r.discount_week ?? 0)}"></label>
+          <label>Sconto da 28 notti (%)<input name="discount_month" type="number" min="0" max="90" step="0.5" value="${Number(r.discount_month ?? 0)}"></label>
         </div>
+        <p class="muted small">Gli sconti si applicano al totale del soggiorno; da 28 notti vale quello mensile.</p>
       </fieldset>`}
       <div class="actions">
         ${isNew || !editInfo ? '' : '<button type="button" class="btn danger ghost" id="room-del">Elimina alloggio</button>'}
@@ -529,6 +532,8 @@ async function renderRoomEditor(r) {
       min_nights: Number(f.min_nights.value) || 1,
       price_from: f.price_from.value ? Number(f.price_from.value) : null,
       price_weekend: f.price_weekend.value ? Number(f.price_weekend.value) : null,
+      discount_week: Number(f.discount_week.value) || 0,
+      discount_month: Number(f.discount_month.value) || 0,
     });
     const q = isNew ? sb.from('rooms').insert(rec).select().single() : sb.from('rooms').update(rec).eq('id', r.id).select().single();
     const { data, error } = await q;

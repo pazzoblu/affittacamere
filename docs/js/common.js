@@ -6,7 +6,14 @@ export const sb = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : n
 
 // Colonne alloggio leggibili dalla vetrina (il token iCal resta privato)
 export const ROOM_PUBLIC_COLS =
-  'id, slug, name, short_description, description, capacity, price_from, price_weekend, min_nights, amenities, sort_order, published, cin, cir';
+  'id, slug, name, short_description, description, capacity, price_from, price_weekend, min_nights, amenities, sort_order, published, cin, cir, discount_week, discount_month';
+
+// Sconti per soggiorni lunghi in breve, es. "−15% da 7 notti · −30% da 28 notti" ('' se non ce ne sono)
+export function discountText(r) {
+  const pct = n => `−${Number(n).toLocaleString('it-IT')}%`;
+  return [Number(r.discount_week) > 0 && `${pct(r.discount_week)} da 7 notti`,
+    Number(r.discount_month) > 0 && `${pct(r.discount_month)} da 28 notti`].filter(Boolean).join(' · ');
+}
 
 // Messaggio leggibile da un errore di sb.functions.invoke (il corpo JSON contiene { error })
 export async function functionError(error) {

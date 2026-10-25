@@ -87,6 +87,12 @@ create table if not exists rooms (
 alter table rooms add column if not exists price_weekend numeric(10,2);  -- notti di venerdì e sabato
 alter table rooms add column if not exists min_nights int not null default 1;
 -- Codice Identificativo Nazionale (obbligatorio negli annunci) ed eventuale codice regionale
+-- sconti percentuali per soggiorni lunghi: da 7 notti ("settimana") e da 28 notti ("mese")
+alter table rooms add column if not exists discount_week numeric(5,2) not null default 0;
+alter table rooms add column if not exists discount_month numeric(5,2) not null default 0;
+alter table rooms drop constraint if exists rooms_discounts_chk;
+alter table rooms add constraint rooms_discounts_chk
+  check (discount_week between 0 and 90 and discount_month between 0 and 90);
 alter table rooms add column if not exists cin text not null default '';
 alter table rooms add column if not exists cir text not null default '';
 
@@ -297,10 +303,10 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
--- Prezzo totale: per ogni notte vale la stagione che la contiene (se ce n'è più d'una,
--- quella iniziata più tardi), altrimenti il prezzo base; venerdì e sabato usano il prezzo weekend.
+-- Somma delle notti, senza sconti: per ogni notte vale la stagione che la contiene (se ce n'è più
+-- d'una, quella iniziata più tardi), altrimenti il prezzo base; venerdì e sabato usano il prezzo weekend.
 -- Restituisce null se manca un prezzo per qualche notte.
-create or replace function quote_price(p_room uuid, p_check_in date, p_check_out date)
+create or replace function quote_price_base(p_room uuid, p_check_in date, p_check_out date)
 returns numeric
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -335,6 +341,25 @@ begin
 end;
 $$;
 
+-- Sconto per soggiorni lunghi: quello "mese" da 28 notti, altrimenti quello "settimana" da 7 notti
+create or replace function stay_discount(p_room uuid, p_nights int)
+returns numeric
+language sql stable security definer set search_path = public as $$
+  select case
+    when p_nights >= 28 and discount_month > 0 then discount_month
+    when p_nights >= 7 then discount_week
+    else 0 end
+  from rooms where id = p_room;
+$$;
+
+-- Prezzo totale del soggiorno, sconto per durata compreso: è l'importo che si paga
+create or replace function quote_price(p_room uuid, p_check_in date, p_check_out date)
+returns numeric
+language sql stable security definer set search_path = public as $$
+  select round(quote_price_base(p_room, p_check_in, p_check_out)
+               * (100 - coalesce(stay_discount(p_room, p_check_out - p_check_in), 0)) / 100.0, 2);
+$$;
+
 -- ---------------------------------------------------------------------
 -- Funzioni pubbliche (usate dalla vetrina, senza esporre dati ospiti)
 -- ---------------------------------------------------------------------
@@ -353,10 +378,12 @@ language sql stable security definer set search_path = public as $$
   order by b.check_in;
 $$;
 
--- Preventivo per la vetrina: notti, totale, acconto, se si può pagare online
+-- Preventivo per la vetrina: notti, totale (già scontato), prezzo pieno e sconto, acconto, pagamento online
+drop function if exists quote_booking(uuid, date, date);
 create or replace function quote_booking(p_room uuid, p_check_in date, p_check_out date)
 returns table(nights int, total numeric, deposit numeric, deposit_percent int,
-              min_nights int, available boolean, online_payment boolean)
+              min_nights int, available boolean, online_payment boolean,
+              full_total numeric, discount_percent numeric)
 language plpgsql stable security definer set search_path = public as $$
 declare
   v_min int;
@@ -379,7 +406,9 @@ begin
     v_pct,
     v_min,
     room_is_free(p_room, p_check_in, p_check_out),
-    coalesce(v_active, false) and v_total is not null and v_total > 0;
+    coalesce(v_active, false) and v_total is not null and v_total > 0,
+    quote_price_base(p_room, p_check_in, p_check_out),
+    coalesce(stay_discount(p_room, p_check_out - p_check_in), 0);
 end;
 $$;
 
@@ -638,6 +667,8 @@ end;
 $$;
 
 revoke execute on function quote_price(uuid, date, date) from public, anon;
+revoke execute on function quote_price_base(uuid, date, date) from public, anon, authenticated;
+revoke execute on function stay_discount(uuid, int) from public, anon, authenticated;
 grant execute on function quote_price(uuid, date, date) to authenticated;  -- "calcola dai listini" nell admin
 revoke execute on function room_is_free(uuid, date, date, uuid) from public, anon, authenticated;
 revoke execute on function validate_site_booking(uuid, date, date, text, int) from public, anon, authenticated;
@@ -670,11 +701,13 @@ begin
     if not has_role('camere') then
       raise exception 'Non hai i permessi per aggiungere alloggi';
     end if;
-    if not has_role('prezzi') and (new.price_from is not null or new.price_weekend is not null or new.min_nights <> 1) then
+    if not has_role('prezzi') and (new.price_from is not null or new.price_weekend is not null or new.min_nights <> 1
+                                   or new.discount_week <> 0 or new.discount_month <> 0) then
       raise exception 'Non hai i permessi per impostare i prezzi';
     end if;
   else
-    if (new.price_from, new.price_weekend, new.min_nights) is distinct from (old.price_from, old.price_weekend, old.min_nights)
+    if (new.price_from, new.price_weekend, new.min_nights, new.discount_week, new.discount_month)
+       is distinct from (old.price_from, old.price_weekend, old.min_nights, old.discount_week, old.discount_month)
        and not has_role('prezzi') then
       raise exception 'Non hai i permessi per modificare i prezzi';
     end if;
@@ -778,6 +811,7 @@ create policy notifications_delete on notifications for delete using (has_role('
 -- Il token iCal non deve essere leggibile dalla vetrina
 revoke select on rooms from anon;
 grant select (id, slug, name, short_description, description, capacity, price_from, price_weekend, cin, cir,
+              discount_week, discount_month,
               min_nights, amenities, sort_order, published, created_at) on rooms to anon;
 
 -- ---------------------------------------------------------------------

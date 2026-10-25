@@ -1,6 +1,6 @@
 import {
   sb, configured, esc, paragraphs, photoUrl, euro, loadContent, notConfiguredMessage, ROOM_PUBLIC_COLS,
-  isoDate, addDays, nightsBetween, fmtDate, MONTHS, WEEKDAYS, functionError,
+  isoDate, addDays, nightsBetween, fmtDate, MONTHS, WEEKDAYS, functionError, discountText,
 } from './common.js';
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -112,7 +112,12 @@ async function updateStay() {
   if (ci !== checkIn || co !== checkOut) return; // l'ospite ha già cambiato date
   if (error) { stay.innerHTML = `${head}<br>${esc(error.message)}`; return; }
   quote = data[0];
-  if (quote.total != null) stay.innerHTML = `${head}<span class="total">Totale ${euro(quote.total)}</span>`;
+  if (quote.total != null) {
+    const disc = Number(quote.discount_percent) > 0
+      ? `<span class="discount">Sconto soggiorno lungo −${Number(quote.discount_percent).toLocaleString('it-IT')}%:
+          invece di <s>${euro(quote.full_total)}</s></span>` : '';
+    stay.innerHTML = `${head}<span class="total">Totale ${euro(quote.total)}</span>${disc}`;
+  }
   if (!quote.available) {
     stay.innerHTML += '<br>Spiacenti, le date non sono più disponibili.';
     return;
@@ -215,6 +220,9 @@ async function init() {
     `<span>👤 fino a ${room.capacity} ${room.capacity === 1 ? 'ospite' : 'ospiti'}` +
     (room.min_nights > 1 ? ` · minimo ${room.min_nights} notti` : '') + '</span>' +
     (room.price_from != null ? `<span class="price">da <strong>${euro(room.price_from)}</strong>/notte</span>` : '');
+  const discounts = discountText(room);
+  document.getElementById('room-discounts').hidden = !discounts;
+  document.getElementById('room-discounts').textContent = discounts && `Soggiorni lunghi: ${discounts}`;
   document.getElementById('room-codes').textContent =
     [room.cin && `CIN ${room.cin}`, room.cir && `CIR ${room.cir}`].filter(Boolean).join(' · ');
   document.getElementById('amenities').innerHTML = room.amenities.map(a => `<li>${esc(a)}</li>`).join('');

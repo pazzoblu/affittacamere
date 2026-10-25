@@ -159,7 +159,8 @@ presa all'ultimo minuto può ancora sovrapporsi. Il calendario admin evidenzia i
   *confermata* (blocca la camera), *annullata*. Le richieste non bloccano il calendario finché non le confermi,
   tranne durante un pagamento online in corso (35 minuti).
 - **Prezzi**: per ogni notte vale il prezzo stagionale se la notte cade in un periodo, altrimenti il prezzo base;
-  le notti di venerdì e sabato usano il prezzo weekend. Il calcolo avviene nel database (`quote_price`),
+  le notti di venerdì e sabato usano il prezzo weekend. Sul totale si applica lo sconto per durata:
+  quello "settimana" da 7 notti, quello "mese" da 28 notti (campi della scheda Alloggi, ruolo Prezzi). Il calcolo avviene nel database (`quote_price`),
   quindi l'importo pagato non è manipolabile dal browser.
 - **Sicurezza**: la vetrina usa solo la chiave pubblica; le policy RLS permettono di leggere camere, foto e testi,
   di vedere i giorni occupati (senza dati personali), di inviare richieste e di consultare la propria prenotazione con codice + email. Tutto il resto è riservato allo staff, secondo il ruolo.
