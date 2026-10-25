@@ -19,6 +19,20 @@ async function fillLegalLine() {
   el.innerHTML = parts.join('<span class="sep"> | </span>');
 }
 
+// Menu a scomparsa su cellulare (il pulsante è visibile solo su schermi stretti, via CSS)
+const toggle = document.querySelector('.menu-toggle');
+const nav = document.getElementById('site-nav');
+if (toggle && nav) {
+  const setOpen = open => {
+    nav.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Chiudi il menu' : 'Apri il menu');
+  };
+  toggle.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
+  nav.addEventListener('click', e => { if (e.target.closest('a')) setOpen(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+}
+
 const year = document.getElementById('year');
 if (year && !year.textContent) year.textContent = new Date().getFullYear();
 fillLegalLine().catch(err => console.error(err));

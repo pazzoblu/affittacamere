@@ -182,6 +182,17 @@ async function submitForm(e) {
   renderCalendar();
 }
 
+// Barra in basso (visibile solo su schermi stretti, via CSS): sparisce quando il riquadro di prenotazione è sullo schermo
+function setupMobileCta() {
+  const cta = document.getElementById('mobile-cta');
+  document.getElementById('mobile-cta-price').innerHTML =
+    room.price_from != null ? `da <strong>${euro(room.price_from)}</strong>/notte` : esc(room.name);
+  cta.hidden = false;
+  if (!('IntersectionObserver' in window)) return;
+  new IntersectionObserver(([entry]) => cta.classList.toggle('away', entry.isIntersecting), { threshold: 0.05 })
+    .observe(document.getElementById('prenota'));
+}
+
 async function init() {
   const slug = new URLSearchParams(location.search).get('c');
   const [c, res] = await Promise.all([
@@ -212,6 +223,7 @@ async function init() {
     Array.from({ length: room.capacity }, (_, i) => `<option>${i + 1}</option>`).join('');
   renderGallery([...room.room_photos].sort((a, b) => a.sort_order - b.sort_order));
   document.getElementById('room').hidden = false;
+  setupMobileCta();
 
   await loadBusy();
   renderCalendar();

@@ -10,7 +10,10 @@
   <header class="site-header">
     <div class="wrap">
       <a class="brand" href="./" data-c="titolo">Casa vacanze</a>
-      <nav class="site-nav">
+      <button class="menu-toggle" type="button" aria-label="Apri il menu" aria-expanded="false" aria-controls="site-nav">
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="site-nav" id="site-nav">
         <a href="./#alloggio">L'alloggio</a>
         <a href="prenotazione.html">La mia prenotazione</a>
         <a href="./#contatti">Contatti</a>
@@ -37,7 +40,7 @@
           <div id="room-desc"></div>
         </div>
 
-        <aside class="booking-box">
+        <aside class="booking-box" id="prenota">
           <h2>Verifica disponibilità</h2>
           <div class="cal-nav">
             <button type="button" id="prev" aria-label="Mese precedente">‹</button>
@@ -84,6 +87,12 @@
       </div>
     </div>
   </main>
+
+  <!-- solo su cellulare: porta al calendario senza dover scorrere tutta la descrizione -->
+  <a class="mobile-cta" id="mobile-cta" href="#prenota" hidden>
+    <span id="mobile-cta-price"></span>
+    <span class="mobile-cta-btn">Verifica disponibilità</span>
+  </a>
 
   <footer>
     <div class="wrap">

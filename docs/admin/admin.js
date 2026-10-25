@@ -76,6 +76,7 @@ const tabAllowed = btn => btn.dataset.role.split(' ').some(can);
 
 function openTab(name) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelector(`#tabs button[data-tab="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center' });
   document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== name; });
   try { localStorage.setItem('admin-tab', name); } catch { /* storage non disponibile */ }
   loaders[name]().catch(showError);
@@ -112,7 +113,7 @@ async function renderTimeline() {
   if (error) throw error;
 
   const tl = $('timeline');
-  tl.style.gridTemplateColumns = `150px repeat(${days}, minmax(28px, 1fr))`;
+  tl.style.gridTemplateColumns = `var(--lbl, 150px) repeat(${days}, minmax(28px, 1fr))`;
   const t = today();
   const dayInfo = Array.from({ length: days }, (_, i) => {
     const d = addDays(first, i);
@@ -173,6 +174,12 @@ async function renderTimeline() {
   }
   tl.innerHTML = html;
   tl._bookings = bookings;
+  // su schermi stretti il mese non sta tutto: porta in vista la colonna di oggi
+  const todayHd = tl.querySelector('.hd.today');
+  const wrap = tl.parentElement;
+  if (todayHd && wrap.scrollWidth > wrap.clientWidth) {
+    wrap.scrollLeft = Math.max(0, todayHd.offsetLeft - (tl.querySelector('.room-lbl')?.offsetWidth ?? 0) - 28);
+  }
 }
 
 $('timeline').addEventListener('click', e => {
@@ -370,14 +377,14 @@ async function renderBookingList() {
       const n = nightsBetween(b.check_in, b.check_out);
       const cancelReq = b.cancel_requested_at && b.status !== 'annullata';
       return `<tr${cancelReq ? ' class="row-alert"' : ''}>
-        <td>${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}<br><span class="muted small">${n} ${n === 1 ? 'notte' : 'notti'}</span></td>
-        <td>${esc(roomName(b.room_id))}</td>
-        <td><strong class="code">${esc(b.code)}</strong>${b.guests ? ` <span class="muted small">(${b.guests} osp.)</span>` : ''}
+        <td data-label="Date">${fmtDate(b.check_in)} → ${fmtDate(b.check_out)}<br><span class="muted small">${n} ${n === 1 ? 'notte' : 'notti'}</span></td>
+        <td data-label="Alloggio">${esc(roomName(b.room_id))}</td>
+        <td data-label="Cliente"><strong class="code">${esc(b.code)}</strong>${b.guests ? ` <span class="muted small">(${b.guests} osp.)</span>` : ''}
           ${b.guest_email ? `<br><a class="small" href="mailto:${esc(b.guest_email)}?subject=${encodeURIComponent('Prenotazione ' + b.code)}">${esc(b.guest_email)}</a>` : ''}</td>
-        <td><span class="pill bg-${b.source}">${SOURCE_LABEL[b.source]}</span></td>
-        <td class="small">${esc(b.notes)}</td>
-        <td>${paymentCell(b)}</td>
-        <td><span class="st ${b.status}">${b.status}</span>${cancelReq ? '<br><span class="paid in_attesa">cancellazione richiesta</span>' : ''}</td>
+        <td data-label="Canale"><span class="pill bg-${b.source}">${SOURCE_LABEL[b.source]}</span></td>
+        <td class="small" data-label="Note">${esc(b.notes)}</td>
+        <td data-label="Pagamento">${paymentCell(b)}</td>
+        <td data-label="Stato"><span class="st ${b.status}">${b.status}</span>${cancelReq ? '<br><span class="paid in_attesa">cancellazione richiesta</span>' : ''}</td>
         <td class="act">
           ${b.status === 'richiesta' ? `<button class="btn small" data-act="ok" data-id="${b.id}">Conferma</button>
             <button class="btn small danger ghost" data-act="no" data-id="${b.id}">Rifiuta</button>` : ''}
@@ -593,10 +600,10 @@ async function renderSeasons(roomId) {
   el.innerHTML = data.length ? `<table class="seasons">
     <thead><tr><th>Periodo</th><th>Notti</th><th>€/notte</th><th>€ ven/sab</th><th></th></tr></thead>
     <tbody>${data.map(s => `<tr${s.date_to < today() ? ' class="muted"' : ''}>
-      <td>${esc(s.name) || '—'}</td>
-      <td>${fmtDate(s.date_from)} → ${fmtDate(s.date_to)}</td>
-      <td>${euro(s.price_night)}</td>
-      <td>${s.price_weekend != null ? euro(s.price_weekend) : '<span class="muted">come notte</span>'}</td>
+      <td data-label="Periodo">${esc(s.name) || '—'}</td>
+      <td data-label="Notti">${fmtDate(s.date_from)} → ${fmtDate(s.date_to)}</td>
+      <td data-label="€/notte">${euro(s.price_night)}</td>
+      <td data-label="€ ven/sab">${s.price_weekend != null ? euro(s.price_weekend) : '<span class="muted">come notte</span>'}</td>
       <td><button class="link small" data-del-season="${s.id}">elimina</button></td>
     </tr>`).join('')}</tbody></table>` : '<p class="muted small">Nessun periodo: si usano sempre i prezzi base.</p>';
   el.onclick = async e => {
@@ -914,12 +921,12 @@ async function renderUsers() {
   el.innerHTML = `<table class="bk-table">
     <thead><tr><th>Utente</th><th>Ruoli</th><th>Ultimo accesso</th><th></th></tr></thead>
     <tbody>${users.map(u => `<tr>
-      <td>${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
+      <td data-label="Utente">${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
         ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}
         ${u.pending ? '<br><span class="paid in_attesa">non ha ancora attivato l\'accesso</span>' : ''}</td>
-      <td>${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
+      <td data-label="Ruoli">${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
         : '<span class="muted small">nessun ruolo: non può entrare</span>'}</td>
-      <td class="small">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
+      <td class="small" data-label="Ultimo accesso">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
       <td class="act">
         <button class="btn small ghost" data-user="edit" data-id="${u.id}">Ruoli</button>
         ${u.id === me.id ? '' : `<button class="btn small ghost" data-user="link" data-id="${u.id}"

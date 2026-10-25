@@ -215,3 +215,61 @@ dialog::backdrop { background: rgba(30, 20, 10, .45); }
   .content { padding: 16px 12px 40px; }
   .bk-table th:nth-child(5), .bk-table td:nth-child(5) { display: none; }
 }
+
+/* ---------------- Cellulare ---------------- */
+@media (max-width: 640px) {
+  body { font-size: 15px; }
+  /* campi a 16px: su iPhone sotto questa misura la pagina si ingrandisce quando si tocca un campo */
+  input, select, textarea { font-size: 16px; padding: 10px 12px; }
+  input[type=checkbox] { width: 20px; height: 20px; vertical-align: -4px; }
+
+  /* barra in alto: riga con nome e collegamenti, sotto le schede scorrevoli */
+  .topbar { padding: 6px 12px 0; gap: 4px 10px; }
+  .topbar > strong { font-size: .95rem; }
+  .topbar .right { gap: 12px; font-size: .85rem; }
+  #me-label { display: none; }
+  .tabs { margin: 0 -12px; padding: 0 6px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { padding: 12px 10px 10px; }
+
+  .content { padding: 14px 12px 40px; }
+  .toolbar h2 { min-width: 0; font-size: 1.15rem; }
+  .card { padding: 16px 14px; }
+  .btn { padding: 10px 16px; }
+  .btn.small { padding: 8px 12px; }
+
+  /* calendario: colonna degli alloggi più stretta, il resto scorre in orizzontale */
+  .timeline { --lbl: 96px; min-width: 760px; }
+  .timeline .room-lbl { font-size: .8rem; padding: 6px 8px; }
+  .legend { gap: 8px 12px; }
+
+  /* tabelle (prenotazioni, utenti, stagioni) come schede una sotto l'altra */
+  .bk-table, .seasons { background: none; }
+  .bk-table thead, .seasons thead { display: none; }
+  .bk-table, .bk-table tbody, .bk-table tr, .bk-table td,
+  .seasons, .seasons tbody, .seasons tr, .seasons td { display: block; width: 100%; }
+  .bk-table tr, .seasons tr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; margin-bottom: 10px; }
+  .bk-table tr.row-alert { border-color: #f0c98f; background: #fff8ee; }
+  .row-alert td { background: none; }
+  .bk-table td, .seasons td { border: 0; padding: 4px 0; display: flex; gap: 10px; }
+  .bk-table td[data-label]::before, .seasons td[data-label]::before { content: attr(data-label); flex: 0 0 92px;
+    color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; padding-top: 2px; }
+  .bk-table td > br { display: none; }
+  .bk-table td:empty, .bk-table td.small:empty { display: none; }
+  .bk-table th:nth-child(5), .bk-table td:nth-child(5) { display: flex; }
+  .bk-table td.act { justify-content: flex-start; flex-wrap: wrap; gap: 6px; padding-top: 8px; white-space: normal; }
+  .bk-table td.act .btn { margin: 0; }
+  #bk-list { overflow: visible; }
+
+  /* finestre (prenotazione, utente, password) a tutto schermo */
+  dialog, #pw-dialog, #user-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
+    border-radius: 0; padding: 16px 14px 0; }
+  dialog form { min-height: 100%; display: flex; flex-direction: column; }
+  dialog .actions { position: sticky; bottom: 0; background: var(--surface); margin: auto -14px 0; padding: 12px 14px;
+    border-top: 1px solid var(--line); flex-wrap: wrap; }
+
+  .photos { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .note-head { flex-wrap: wrap; }
+  .pay-list li { flex-wrap: wrap; }
+}
