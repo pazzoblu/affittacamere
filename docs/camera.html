@@ -91,6 +91,24 @@
   </main>
 
   <!-- solo su cellulare: porta al calendario senza dover scorrere tutta la descrizione -->
+  <!-- Conferma dopo "Invia richiesta" -->
+  <dialog class="popup" id="done-popup" aria-labelledby="done-title" aria-describedby="done-text">
+    <div class="popup-icon" aria-hidden="true">✓</div>
+    <h2 id="done-title">Richiesta inviata!</h2>
+    <p id="done-text"></p>
+    <div class="popup-code">
+      <span>Il tuo codice prenotazione</span>
+      <strong class="code" id="done-code"></strong>
+      <button type="button" class="btn ghost small-btn" id="done-copy">Copia codice</button>
+    </div>
+    <p class="popup-note">Annotalo: con il codice e la tua email puoi seguire la richiesta, scriverci o chiedere
+      la cancellazione nella pagina La mia prenotazione.</p>
+    <div class="popup-actions">
+      <a class="btn" id="done-follow" href="prenotazione.html">Segui la prenotazione</a>
+      <button type="button" class="btn ghost" id="done-close">Chiudi</button>
+    </div>
+  </dialog>
+
   <a class="mobile-cta" id="mobile-cta" href="#prenota" hidden>
     <span id="mobile-cta-price"></span>
     <span class="mobile-cta-btn">Verifica disponibilità</span>

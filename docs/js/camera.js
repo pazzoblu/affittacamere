@@ -153,6 +153,31 @@ async function loadBusy() {
   for (const r of data) for (let d = r.check_in; d < r.check_out; d = addDays(d, 1)) busyNights.add(d);
 }
 
+// Finestra di conferma dopo una richiesta inviata (la conferma scritta resta anche sotto il modulo)
+function showDonePopup(code, email, from, to) {
+  const dlg = document.getElementById('done-popup');
+  document.getElementById('done-text').innerHTML =
+    `Grazie! Abbiamo ricevuto la tua richiesta per <strong>${esc(room.name)}</strong>
+     dal ${fmtDate(from)} al ${fmtDate(to)}. Ti risponderemo a <strong>${esc(email)}</strong> per confermarla:
+     per ora non ti è stato addebitato nulla.`;
+  document.getElementById('done-code').textContent = code;
+  document.getElementById('done-follow').href = `prenotazione.html?c=${encodeURIComponent(code)}`;
+  const copy = document.getElementById('done-copy');
+  copy.textContent = 'Copia codice';
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      copy.textContent = 'Copiato ✓';
+    } catch {
+      copy.textContent = 'Copia non riuscita: annotalo a mano';
+    }
+  };
+  document.getElementById('done-close').onclick = () => dlg.close();
+  // clic sullo sfondo scuro fuori dalla finestra: chiude
+  dlg.onclick = e => { if (e.target === dlg) dlg.close(); };
+  dlg.showModal();
+}
+
 async function submitForm(e) {
   e.preventDefault();
   const f = e.target;
@@ -194,6 +219,7 @@ async function submitForm(e) {
   out.innerHTML = `<div class="msg ok">Richiesta inviata! Il tuo codice prenotazione è
     <strong class="code">${esc(code)}</strong>: annotalo. Con il codice e la tua email puoi seguire
     la richiesta nella pagina <a href="prenotazione.html?c=${encodeURIComponent(code)}">La mia prenotazione</a>.</div>`;
+  showDonePopup(code, f.email.value.trim(), checkIn, checkOut);
   f.reset();
   checkIn = checkOut = null;
   updateStay();

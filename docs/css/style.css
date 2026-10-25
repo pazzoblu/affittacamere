@@ -248,6 +248,29 @@ footer .legal-line .sep { opacity: .5; }
 .gallery .thumbs button img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gallery .thumbs button:hover { border-color: var(--brand-light); }
 
+/* ---------------- Finestra di conferma (popup) ---------------- */
+.popup { border: 0; border-radius: 18px; padding: 30px 28px 24px; width: min(460px, calc(100vw - 32px));
+  text-align: center; color: var(--text); background: var(--surface); box-shadow: 0 24px 70px rgba(15, 35, 43, .35); }
+.popup::backdrop { background: rgba(15, 35, 43, .55); }
+.popup[open] { animation: popup-in .25s ease-out; }
+@keyframes popup-in { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .popup[open] { animation: none; } }
+.popup-icon { width: 58px; height: 58px; margin: 0 auto 12px; border-radius: 50%; background: #e6f4ea; color: var(--ok);
+  display: flex; align-items: center; justify-content: center; font-size: 1.9rem; font-weight: 700; }
+.popup h2 { font-size: 1.6rem; margin-bottom: .4em; }
+.popup p { margin: 0 0 14px; }
+.popup-code { background: var(--brand-light); border-radius: 12px; padding: 14px; margin: 6px 0 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.popup-code span { font-size: .85rem; color: var(--muted); }
+.popup-code strong { font-size: 1.6rem; color: var(--brand); }
+.btn.small-btn { padding: 7px 16px; font-size: .9rem; }
+.popup-note { font-size: .85rem; color: var(--muted); }
+.popup-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+@media (max-width: 640px) {
+  .popup { padding: 24px 18px 18px; }
+  .popup-actions .btn { flex: 1 1 100%; }
+}
+
 /* ---------------- Accessibilità: focus ben visibile da tastiera ---------------- */
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
 [tabindex]:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
