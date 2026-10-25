@@ -129,6 +129,10 @@
       <!-- Contenuti -->
       <section data-panel="contenuti" hidden>
         <form id="content-form" class="card narrow">
+          <div class="form-top form-top-page">
+            <h2>Sito e pagamenti</h2>
+            <div class="form-top-actions"><button class="btn" type="submit">Salva</button></div>
+          </div>
           <div id="content-texts">
           <h2>Testi del sito</h2>
           <label>Nome della struttura<input name="titolo"></label>
@@ -192,7 +196,13 @@
   <!-- Dialog prenotazione -->
   <dialog id="bk-dialog">
     <form id="bk-form" method="dialog">
-      <h2 id="bk-title">Prenotazione</h2>
+      <div class="form-top">
+        <h2 id="bk-title">Prenotazione</h2>
+        <div class="form-top-actions">
+          <button type="button" class="btn ghost" data-close>Chiudi</button>
+          <button type="submit" class="btn">Salva</button>
+        </div>
+      </div>
       <p class="muted small" id="bk-code"></p>
       <div id="bk-cancel-req" class="notice small" hidden></div>
       <div id="bk-external" class="notice small" hidden></div>
@@ -263,7 +273,13 @@
   <!-- Dialog utente -->
   <dialog id="user-dialog">
     <form id="user-form">
-      <h2 id="user-title">Nuovo utente</h2>
+      <div class="form-top">
+        <h2 id="user-title">Nuovo utente</h2>
+        <div class="form-top-actions">
+          <button type="button" class="btn ghost" data-close>Annulla</button>
+          <button type="submit" class="btn">Salva</button>
+        </div>
+      </div>
       <label>Nome (facoltativo)<input name="name" maxlength="100"></label>
       <label>Email<input name="email" type="email" required></label>
       <label id="user-pw-label"><span id="user-pw-text">Password (facoltativa): lasciala vuota e l'utente riceverà

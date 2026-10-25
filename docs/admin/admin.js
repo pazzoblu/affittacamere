@@ -18,7 +18,12 @@ let selectedRoomId = null;
 
 function msg(el, text, kind = 'err') {
   el.innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : '';
+  // si può salvare anche dai pulsanti in alto: il messaggio va portato in vista
+  if (text) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
+
+// pulsanti "Chiudi/Annulla" della barra in alto delle finestre
+document.querySelectorAll('dialog [data-close]').forEach(b => { b.onclick = () => b.closest('dialog').close(); });
 
 function showView(id) {
   for (const v of ['login-view', 'msg-view', 'app-view']) $(v).hidden = v !== id;
@@ -448,7 +453,10 @@ async function renderRoomEditor(r) {
   const ed = $('room-editor');
   ed.innerHTML = `
     <form id="room-form">
-      <h2>${isNew ? 'Nuovo alloggio' : esc(r.name)}</h2>
+      <div class="form-top form-top-page">
+        <h2>${isNew ? 'Nuovo alloggio' : esc(r.name)}</h2>
+        ${editInfo || editPrice ? `<div class="form-top-actions"><button class="btn" type="submit">${isNew ? 'Crea alloggio' : 'Salva'}</button></div>` : ''}
+      </div>
       <fieldset class="plain" ${editInfo ? '' : 'disabled'}>
         <div class="grid2">
           <label>Nome<input name="name" required value="${esc(r.name)}"></label>
