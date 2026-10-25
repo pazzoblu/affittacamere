@@ -87,6 +87,35 @@ const loaders = {
 // una scheda è visibile se l'utente ha almeno uno dei ruoli indicati in data-role
 const tabAllowed = btn => btn.dataset.role.split(' ').some(can);
 
+// Aggiornamento dei dati: ogni minuto, al ritorno sulla scheda e col pulsante ↻.
+// Solo le schede di sola consultazione: mai mentre si compila (alloggi, testi, finestre aperte).
+const AUTO_REFRESH_TABS = ['calendario', 'prenotazioni', 'messaggi', 'sync', 'utenti'];
+let refreshing = false;
+
+async function refreshData({ manual = false } = {}) {
+  if (!started || refreshing || (!manual && document.hidden)) return;
+  if (document.querySelector('dialog[open]')) return;
+  const tab = document.querySelector('#tabs button.on')?.dataset.tab;
+  refreshing = true;
+  try {
+    await refreshBadge();
+    if (tab && (AUTO_REFRESH_TABS.includes(tab) || manual)) {
+      // il calendario resta dove l'utente l'aveva fatto scorrere
+      const wrap = document.querySelector('.timeline-wrap');
+      const x = wrap?.scrollLeft;
+      await loaders[tab]();
+      if (tab === 'calendario' && !manual && wrap) wrap.scrollLeft = x;
+    }
+    $('refresh-btn').title = `Aggiorna i dati (ultimo aggiornamento alle ${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+  } catch (err) {
+    if (manual) showError(err);
+  } finally {
+    refreshing = false;
+  }
+}
+setInterval(() => refreshData(), 60000);
+$('refresh-btn').onclick = () => refreshData({ manual: true });
+
 function openTab(name) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   document.querySelector(`#tabs button[data-tab="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -850,9 +879,47 @@ $('sync-now').onclick = runSync;
 document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => openTab(b.dataset.tab); });
 $('logout').onclick = () => sb.auth.signOut();
 
+// ---------------------------------------------------------------------
+// Scadenza della sessione: dopo 30 minuti senza attività bisogna rientrare.
+// L'ultima attività è salvata nel browser ed è condivisa fra le schede aperte.
+// ---------------------------------------------------------------------
+const IDLE_LIMIT_MS = 30 * 60 * 1000;
+const ACTIVITY_KEY = 'admin-last-activity';
+let lastActivityMem = 0; // se il browser blocca localStorage
+let lastActivityWrite = 0;
+
+function getLastActivity() {
+  try { return Number(localStorage.getItem(ACTIVITY_KEY)) || lastActivityMem; } catch { return lastActivityMem; }
+}
+function touchActivity(force = false) {
+  const now = Date.now();
+  if (!force && now - lastActivityWrite < 15000) return; // al massimo una scrittura ogni 15 secondi
+  lastActivityWrite = now;
+  lastActivityMem = now;
+  try { localStorage.setItem(ACTIVITY_KEY, String(now)); } catch { /* storage non disponibile */ }
+}
+const sessionExpired = () => Date.now() - getLastActivity() > IDLE_LIMIT_MS;
+
+async function expireSession() {
+  await sb.auth.signOut();
+  msg($('login-msg'), 'Per sicurezza la sessione è scaduta dopo 30 minuti di inattività: accedi di nuovo.');
+}
+
+for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) {
+  document.addEventListener(ev, () => { if (started) touchActivity(); }, { passive: true, capture: true });
+}
+// controllo periodico, e subito quando si torna sulla scheda del browser
+setInterval(() => { if (started && sessionExpired()) expireSession(); }, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !started) return;
+  if (sessionExpired()) expireSession();
+  else refreshData();
+});
+
 $('login-form').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
+  touchActivity(true);
   const { error } = await sb.auth.signInWithPassword({ email: f.email.value, password: f.password.value });
   if (error) msg($('login-msg'), error.message === 'Invalid login credentials' ? 'Email o password errati.' : error.message);
 });
@@ -1111,6 +1178,9 @@ let started = false;
 async function onSession(session) {
   if (!session) { started = false; showView('login-view'); return; }
   if (started) return;
+  // sessione rimasta salvata nel browser (es. dal giorno prima) ma inattiva da più di 30 minuti
+  if (sessionExpired()) { await expireSession(); return; }
+  touchActivity(true);
   const { data: staff, error } = await sb.from('staff').select('name, roles').eq('user_id', session.user.id).maybeSingle();
   if (error || !staff?.roles?.length) {
     $('msg-card').innerHTML = `<h1>Accesso non autorizzato</h1>
@@ -1146,6 +1216,8 @@ if (!configured) {
   showView('msg-view');
 } else {
   sb.auth.onAuthStateChange((event, session) => {
+    // arrivo da un link email (invito o nuova password): è un accesso appena fatto
+    if (session && window.__authLinkType) touchActivity(true);
     setTimeout(() => {
       onSession(session).catch(showError);
       const invited = session && window.__authLinkType === 'invite';
