@@ -19,6 +19,12 @@ createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': types['.js'] });
       return res.end(await readFile(join(here, 'mock-supabase.js')));
     }
+    // foto di prova dell'alloggio (cartella esclusa da git)
+    if (path.startsWith('/demo-photos/')) {
+      const name = path.slice('/demo-photos/'.length).replace(/[^\w.-]/g, '');
+      res.writeHead(200, { 'Content-Type': types['.jpg'] });
+      return res.end(await readFile(join(here, 'demo-photos', name)));
+    }
     if (path === '/js/config.js') {
       res.writeHead(200, { 'Content-Type': types['.js'] });
       return res.end("export const SUPABASE_URL = 'https://demo.supabase.co';\nexport const SUPABASE_ANON_KEY = 'demo';\n");

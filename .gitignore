@@ -4,3 +4,5 @@ supabase/.branches/
 .env
 .claude/
 Working Copy of *
+tests/dev/demo-photos/
+contenuti/

@@ -2,7 +2,37 @@
 // Lo usa solo tests/dev/server.mjs: non viene mai pubblicato.
 // Login demo: qualsiasi password; l'email sceglie l'utente (admin@, camere@, prenotazioni@, prezzi@demo.test).
 
-const KEY = 'affittacamere-demo-db-v4';
+const KEY = 'affittacamere-demo-db-v5';
+
+// Testi di prova della casa di Pacentro (gli stessi di contenuti/testi-pacentro.md)
+const PACENTRO = {
+  titolo: 'Casa vacanze a Pacentro',
+  sottotitolo: 'Tranquillità, ambienti curati e la bellezza di uno dei borghi più belli d’Italia',
+  chiSiamo: `Ti accogliamo nella nostra casa nel centro storico di Pacentro, borgo medievale nel Parco Nazionale della Majella, tra i Borghi più belli d’Italia.
+
+Ci teniamo che tu ti senta a casa: ogni ambiente viene pulito con cura prima di ogni arrivo e la biancheria è sempre fresca e in ordine.
+
+Qui il tempo scorre lento: niente traffico, solo il silenzio delle montagne, il profumo dei camini e le passeggiate tra i vicoli in pietra.`,
+  breve: 'Appartamento accogliente con camino e vista sulle montagne, nel cuore silenzioso di Pacentro',
+  descrizione: `Un appartamento luminoso e curato nei dettagli, nel centro storico di Pacentro: il posto ideale per chi cerca tranquillità, aria pulita e panorami sulle montagne d’Abruzzo.
+
+Il soggiorno con camino e la cucina attrezzata, con forno e piano cottura, sono perfetti per le serate in casa dopo una giornata all’aperto. La camera matrimoniale, con il suo letto in ferro battuto, è un angolo di quiete per riposare davvero. Il bagno, completo e luminoso, è sempre pulito e in ordine.
+
+Dal balcone lo sguardo spazia dalla montagna che sovrasta il paese fino alle valli e ai monti all’orizzonte: la mattina, con il caffè in mano, è difficile non restare incantati.
+
+Pacentro è uno dei Borghi più belli d’Italia: vicoli in pietra, scorci sulla Valle Peligna e le torri del Castello Caldora che dominano il paese. Siamo nel Parco Nazionale della Majella, con sentieri per escursioni a pochi passi, e a breve distanza da Sulmona. A settembre il borgo si anima con la storica Corsa degli Zingari.
+
+Ogni ambiente viene pulito con cura prima di ogni arrivo e la biancheria è sempre fresca: troverai la casa esattamente come la vedi nelle foto.`,
+  servizi: ['Camino', 'Cucina attrezzata con forno', 'Camera matrimoniale', 'Bagno completo', 'Riscaldamento',
+    'Balcone con vista sulle montagne', 'Centro storico'],
+  foto: [
+    ['soggiorno', 'Il soggiorno con camino e la cucina attrezzata: pulito, ordinato e accogliente'],
+    ['camera', 'La camera matrimoniale: tranquilla e silenziosa, per un riposo vero'],
+    ['bagno', 'Il bagno, curato e sempre pulito, con biancheria fresca a ogni arrivo'],
+    ['vista-valle', 'I tetti di Pacentro e le montagne d’Abruzzo all’orizzonte'],
+    ['vista-monte', 'Dal balcone: il borgo ai piedi della montagna, a due passi dai sentieri della Majella'],
+  ],
+};
 const iso = d => d.toISOString().slice(0, 10);
 const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 const uuid = () => crypto.randomUUID();
@@ -33,10 +63,10 @@ function seed() {
       { user_id: 'demo-prezzi', email: 'prezzi@demo.test', name: '', roles: ['prezzi'] },
     ],
     site_content: [
-      ['titolo', 'Casa Demo'], ['sottotitolo', 'Camere accoglienti a due passi dal centro'],
-      ['chi_siamo', 'Siamo una piccola struttura a conduzione familiare.\n\nTi aspettiamo per un soggiorno rilassante.'],
-      ['indirizzo', 'Via Roma 1, Palermo'], ['telefono', '+39 091 000000'], ['email', 'info@example.com'],
-      ['whatsapp', '+39 333 0000000'], ['hero_image', ''], ['titolare', 'Mario Demo'], ['cf_piva', 'DMEMRA80A01G273X'],
+      ['titolo', PACENTRO.titolo], ['sottotitolo', PACENTRO.sottotitolo],
+      ['chi_siamo', PACENTRO.chiSiamo],
+      ['indirizzo', 'Pacentro (AQ), Abruzzo'], ['telefono', '+39 091 000000'], ['email', 'info@example.com'],
+      ['whatsapp', '+39 333 0000000'], ['hero_image', 'demo/vista-valle.jpg'], ['titolare', 'Mario Demo'], ['cf_piva', 'DMEMRA80A01G273X'],
       ['pagamenti_attivi', '1'], ['acconto_percentuale', '30'],
       ['condizioni_cancellazione', "Cancellazione gratuita fino a 7 giorni prima dell'arrivo."],
       ['termini_versione', '2026-10-24'],
@@ -44,16 +74,18 @@ function seed() {
       ['regolamento', 'Vietato fumare.\n\nNiente feste o eventi.'],
     ].map(([key, value]) => ({ key, value })),
     rooms: [
-      { id: r1, slug: 'camera-blu', name: 'Camera Blu', short_description: 'Matrimoniale con balcone vista mare',
-        description: 'Ampia camera matrimoniale.\n\nBagno privato con doccia.', capacity: 2, price_from: 70,
-        price_weekend: 90, min_nights: 1, cin: 'IT082053C2DEMO0001', cir: '19082053C200001', amenities: ['Wi-Fi', 'Aria condizionata', 'Balcone'], sort_order: 0, published: true, ical_token: uuid() },
+      { id: r1, slug: 'casa-nel-borgo', name: 'Casa nel borgo', short_description: PACENTRO.breve,
+        description: PACENTRO.descrizione, capacity: 2, price_from: 70,
+        price_weekend: 90, min_nights: 1, cin: 'IT066066C2DEMO0001', cir: '', amenities: PACENTRO.servizi, sort_order: 0, published: true, ical_token: uuid() },
+      // altri alloggi di esempio, non pubblicati (per provare la home con più case basta pubblicarli)
       { id: r2, slug: 'camera-verde', name: 'Camera Verde', short_description: 'Tripla luminosa',
         description: 'Camera tripla.', capacity: 3, price_from: 85, price_weekend: null, min_nights: 2, amenities: ['Wi-Fi', 'TV'],
-        sort_order: 1, published: true, ical_token: uuid() },
+        sort_order: 1, published: false, ical_token: uuid() },
       { id: r3, slug: 'suite', name: 'Suite', short_description: 'In allestimento', description: '', capacity: 4,
         price_from: null, price_weekend: null, min_nights: 1, amenities: [], sort_order: 2, published: false, ical_token: uuid() },
     ],
-    room_photos: [],
+    room_photos: PACENTRO.foto.map(([file, caption], i) =>
+      ({ id: uuid(), room_id: r1, path: `demo/${file}.jpg`, caption, sort_order: i })),
     season_prices: [],
     payments: [],
     ical_sources: [{ id: s1, room_id: r1, channel: 'booking', name: 'Booking.com',
@@ -261,7 +293,9 @@ export function createClient() {
     },
     storage: {
       from: () => ({
-        getPublicUrl: p => ({ data: { publicUrl: p.startsWith('data:') ? p : `https://picsum.photos/seed/${encodeURIComponent(p)}/1200/900` } }),
+        // le foto "demo/..." sono quelle vere della casa, servite da tests/dev/demo-photos
+        getPublicUrl: p => ({ data: { publicUrl: p.startsWith('demo/') ? `/demo-photos/${p.slice(5)}`
+          : `https://picsum.photos/seed/${encodeURIComponent(p)}/1200/900` } }),
         upload: async () => ({ error: null }),
         remove: async () => ({ error: null }),
       }),

@@ -108,6 +108,8 @@ footer a { color: var(--muted); }
 .room-page { padding: 40px 0 72px; }
 .back { display: inline-block; margin-bottom: 20px; text-decoration: none; }
 .room-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; align-items: start; }
+/* senza min-width: 0 la fila di miniature allarga la colonna oltre lo schermo */
+.room-layout > * { min-width: 0; }
 .gallery .main { aspect-ratio: 4 / 3; border-radius: var(--radius); background: var(--line) center/cover; }
 .gallery .thumbs { display: flex; gap: 10px; margin-top: 10px; overflow-x: auto; padding-bottom: 4px; }
 .gallery .thumbs button { flex: 0 0 88px; height: 66px; border: 2px solid transparent; border-radius: 8px;
