@@ -18,7 +18,15 @@ let selectedRoomId = null;
 
 function msg(el, text, kind = 'err') {
   el.innerHTML = text ? `<div class="msg ${kind}">${esc(text)}</div>` : '';
-  // si può salvare anche dai pulsanti in alto: il messaggio va portato in vista
+  // le maschere con la barra in alto ripetono l'esito accanto ai pulsanti di salvataggio
+  const status = el.closest('form')?.querySelector('.form-top .save-status');
+  if (status) {
+    clearTimeout(status._timer);
+    status.className = `save-status ${kind}`;
+    status.textContent = text || '';
+    if (text && kind === 'ok') status._timer = setTimeout(() => { status.textContent = ''; }, 5000);
+    return;
+  }
   if (text) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
@@ -456,6 +464,7 @@ async function renderRoomEditor(r) {
       <div class="form-top form-top-page">
         <h2>${isNew ? 'Nuovo alloggio' : esc(r.name)}</h2>
         ${editInfo || editPrice ? `<div class="form-top-actions"><button class="btn" type="submit">${isNew ? 'Crea alloggio' : 'Salva'}</button></div>` : ''}
+        <div class="save-status" aria-live="polite"></div>
       </div>
       <fieldset class="plain" ${editInfo ? '' : 'disabled'}>
         <div class="grid2">

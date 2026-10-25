@@ -206,6 +206,10 @@ fieldset.roles label { color: var(--text); font-size: .9rem; margin-bottom: 8px;
 .form-top h2 { margin: 0; }
 .form-top-actions { display: flex; gap: 8px; margin-left: auto; }
 .form-top-page { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.save-status { flex-basis: 100%; font-size: .88rem; border-radius: 8px; padding: 6px 10px; }
+.save-status:empty { display: none; }
+.save-status.ok { background: #e6f4ea; color: var(--ok); }
+.save-status.err { background: #fde8e6; color: var(--danger); }
 /* nelle finestre resta in vista mentre si scorre */
 dialog .form-top { position: sticky; top: -22px; z-index: 3; background: var(--surface); margin: -22px -22px 14px;
   padding: 14px 22px 12px; border-bottom: 1px solid var(--line); }
@@ -275,8 +279,8 @@ dialog::backdrop { background: rgba(30, 20, 10, .45); }
   dialog, #pw-dialog, #user-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
     border-radius: 0; padding: 16px 14px 0; }
   dialog form { min-height: 100%; display: flex; flex-direction: column; }
-  dialog .form-top { top: -16px; margin: -16px -14px 12px; padding: 10px 14px; flex-wrap: nowrap; }
-  dialog .form-top h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  dialog .form-top { top: -16px; margin: -16px -14px 12px; padding: 10px 14px; }
+  dialog .form-top h2 { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   dialog .form-top-actions { flex: 0 0 auto; }
   .form-top h2 { font-size: 1.15rem; }
   dialog .actions { position: sticky; bottom: 0; background: var(--surface); margin: auto -14px 0; padding: 12px 14px;
