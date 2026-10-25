@@ -29,7 +29,7 @@
       <div class="room-layout" id="room" hidden>
         <div>
           <div class="gallery">
-            <div class="main" id="main-photo"></div>
+            <div class="main"><img id="main-photo" alt="" hidden></div>
             <div class="caption" id="caption"></div>
             <div class="thumbs" id="thumbs"></div>
           </div>
@@ -43,17 +43,18 @@
 
         <aside class="booking-box" id="prenota">
           <h2>Verifica disponibilità</h2>
+          <p class="box-price" id="box-price" hidden></p>
           <div class="cal-nav">
             <button type="button" id="prev" aria-label="Mese precedente">‹</button>
-            <span class="cal-title" id="cal-title"></span>
+            <span class="cal-title" id="cal-title" aria-live="polite"></span>
             <button type="button" id="next" aria-label="Mese successivo">›</button>
           </div>
-          <div class="cal-grid" id="cal"></div>
+          <div class="cal-grid" id="cal" role="group" aria-label="Calendario: scegli il giorno di arrivo e poi quello di partenza"></div>
           <div class="cal-legend">
             <span><i style="background:var(--busy)"></i>Occupato</span>
             <span><i style="background:var(--sel)"></i>Selezionato</span>
           </div>
-          <div class="stay" id="stay">Seleziona sul calendario il giorno di arrivo e quello di partenza.</div>
+          <div class="stay" id="stay" aria-live="polite">Seleziona sul calendario il giorno di arrivo e quello di partenza.</div>
 
           <form id="req-form">
             <div class="row">

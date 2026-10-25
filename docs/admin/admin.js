@@ -527,7 +527,7 @@ async function renderRoomEditor(r) {
       <h2>Foto</h2>
       <p class="muted small">La prima foto è la copertina. Le immagini vengono ridimensionate automaticamente.</p>
       <div class="photos" id="photos"></div>
-      <input type="file" id="photo-files" accept="image/*" multiple>
+      <input type="file" id="photo-files" accept="image/*" multiple aria-label="Aggiungi foto dell'alloggio">
       <div id="photo-msg"></div>
       </div>`}`;
 
@@ -644,13 +644,14 @@ async function renderPhotos(roomId) {
   if (!el) return;
   el.innerHTML = photos.map((p, i) => `
     <div class="photo" data-id="${p.id}">
-      <div class="img" style="background-image:url('${photoUrl(p.path)}')"></div>
+      <div class="img"><img src="${photoUrl(p.path)}" alt="${esc(p.caption || `Foto ${i + 1}`)}" loading="lazy"></div>
       <div class="ctl">
-        <input data-cap value="${esc(p.caption)}" placeholder="Didascalia">
+        <input data-cap value="${esc(p.caption)}" placeholder="Didascalia (è anche il testo alternativo della foto)"
+          aria-label="Didascalia della foto ${i + 1}">
         <div class="btns">
-          <button data-mv="-1" ${i === 0 ? 'disabled' : ''} title="Sposta prima">←</button>
-          <button data-mv="1" ${i === photos.length - 1 ? 'disabled' : ''} title="Sposta dopo">→</button>
-          <button class="del" data-del title="Elimina">✕</button>
+          <button type="button" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="Sposta prima" aria-label="Sposta prima la foto ${i + 1}">←</button>
+          <button type="button" data-mv="1" ${i === photos.length - 1 ? 'disabled' : ''} title="Sposta dopo" aria-label="Sposta dopo la foto ${i + 1}">→</button>
+          <button type="button" class="del" data-del title="Elimina" aria-label="Elimina la foto ${i + 1}">✕</button>
         </div>
       </div>
     </div>`).join('') || '<p class="muted small">Nessuna foto.</p>';

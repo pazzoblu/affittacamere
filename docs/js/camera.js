@@ -30,14 +30,21 @@ function renderGallery(photos) {
   const caption = document.getElementById('caption');
   const thumbs = document.getElementById('thumbs');
   if (!photos.length) { thumbs.innerHTML = ''; return; }
+  // testo alternativo: la didascalia della foto, altrimenti nome dell'alloggio e numero
+  const alt = (p, i) => p.caption || `${room.name}, foto ${i + 1} di ${photos.length}`;
   const show = i => {
-    main.style.backgroundImage = `url("${photoUrl(photos[i].path)}")`;
+    main.src = photoUrl(photos[i].path);
+    main.alt = alt(photos[i], i);
+    main.hidden = false;
     caption.textContent = photos[i].caption || '';
-    thumbs.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', i === j));
+    thumbs.querySelectorAll('button').forEach((b, j) => {
+      b.classList.toggle('on', i === j);
+      b.setAttribute('aria-pressed', String(i === j));
+    });
   };
   thumbs.innerHTML = photos.length > 1 ? photos.map((p, i) =>
-    `<button type="button" data-i="${i}" style="background-image:url('${photoUrl(p.path)}')"
-       aria-label="Foto ${i + 1}"></button>`).join('') : '';
+    `<button type="button" data-i="${i}" aria-label="Mostra la foto ${i + 1}: ${esc(alt(p, i))}" aria-pressed="false">
+       <img src="${photoUrl(p.path)}" alt="" loading="lazy"></button>`).join('') : '';
   thumbs.onclick = e => { const b = e.target.closest('button'); if (b) show(Number(b.dataset.i)); };
   show(0);
 }
@@ -65,7 +72,11 @@ function renderCalendar() {
     if (busy) cls.push('busy');
     if (d === checkIn || d === checkOut) cls.push('sel');
     else if (checkIn && checkOut && d > checkIn && d < checkOut) cls.push('in-range');
-    html += `<button type="button" class="${cls.join(' ')}" data-d="${d}" ${disabled ? 'disabled' : ''}>${n}</button>`;
+    // per lettori di schermo e tastiera: data completa e stato del giorno
+    const state = d === checkIn ? ', arrivo' : d === checkOut ? ', partenza' : busy ? ', occupato' : '';
+    const label = `${fmtDate(d)}${state}`;
+    html += `<button type="button" class="${cls.join(' ')}" data-d="${d}" aria-label="${label}"
+      aria-pressed="${d === checkIn || d === checkOut}" ${disabled ? 'disabled' : ''}>${n}</button>`;
   }
   document.getElementById('cal').innerHTML = html;
 }
@@ -79,6 +90,8 @@ function pickDay(d) {
   }
   updateStay();
   renderCalendar();
+  // il calendario viene ridisegnato: chi usa la tastiera resta sul giorno appena scelto
+  document.querySelector(`#cal .day[data-d="${d}"]`)?.focus();
 }
 
 function setButtons(canRequest, canPay) {
@@ -221,6 +234,11 @@ async function init() {
     (room.min_nights > 1 ? ` · minimo ${room.min_nights} notti` : '') + '</span>' +
     (room.price_from != null ? `<span class="price">da <strong>${euro(room.price_from)}</strong>/notte</span>` : '');
   const discounts = discountText(room);
+  if (room.price_from != null) {
+    const boxPrice = document.getElementById('box-price');
+    boxPrice.innerHTML = `<strong>${euro(room.price_from)}</strong> a notte` + (discounts ? `<span>${esc(discounts)}</span>` : '');
+    boxPrice.hidden = false;
+  }
   document.getElementById('room-discounts').hidden = !discounts;
   document.getElementById('room-discounts').textContent = discounts && `Soggiorni lunghi: ${discounts}`;
   document.getElementById('room-codes').textContent =

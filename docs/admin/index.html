@@ -66,7 +66,7 @@
           <span><i class="st-richiesta"></i>Richiesta da confermare</span>
           <span><i class="conflict-sample"></i>Sovrapposizione!</span>
         </div>
-        <div class="timeline-wrap"><div class="timeline" id="timeline"></div></div>
+        <div class="timeline-wrap" tabindex="0" role="region" aria-label="Calendario delle prenotazioni del mese (scorre in orizzontale)"><div class="timeline" id="timeline"></div></div>
         <p class="small muted">Clicca su un giorno libero per inserire una prenotazione, su una barra per modificarla.</p>
       </section>
 
@@ -75,7 +75,7 @@
         <div class="toolbar">
           <h2>Prenotazioni</h2>
           <span class="spacer"></span>
-          <select id="bk-filter">
+          <select id="bk-filter" aria-label="Quali prenotazioni mostrare">
             <option value="richieste">Da gestire (richieste e cancellazioni)</option>
             <option value="prossime" selected>Prossime e in corso</option>
             <option value="passate">Passate</option>
@@ -90,7 +90,7 @@
         <div class="toolbar">
           <h2>Messaggi e notifiche</h2>
           <span class="spacer"></span>
-          <select id="msg-filter">
+          <select id="msg-filter" aria-label="Quali messaggi mostrare">
             <option value="nuovi" selected>Da leggere</option>
             <option value="tutti">Tutti</option>
           </select>
@@ -149,8 +149,8 @@
           </div>
           <p class="muted small">Titolare, indirizzo ed email compaiono nell'<a href="../privacy.html" target="_blank">informativa privacy</a>.</p>
           <label>Immagine di copertina</label>
-          <div class="hero-preview" id="hero-preview"></div>
-          <input type="file" id="hero-file" accept="image/*">
+          <div class="hero-preview" id="hero-preview" role="img" aria-label="Anteprima dell'immagine di copertina"></div>
+          <input type="file" id="hero-file" accept="image/*" aria-label="Scegli l'immagine di copertina">
 
           <h2 style="margin-top:28px">Termini e regolamento</h2>
           <p class="muted small">Completa le parti tra [quadre]. Ogni modifica aggiorna la data di versione, che viene
