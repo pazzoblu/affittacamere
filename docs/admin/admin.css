@@ -310,3 +310,6 @@ dialog::backdrop { background: rgba(30, 20, 10, .45); }
   .note-head { flex-wrap: wrap; }
   .pay-list li { flex-wrap: wrap; }
 }
+
+/* avviso richieste nascoste dal filtro */
+.bk-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--surface); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: var(--radius); }

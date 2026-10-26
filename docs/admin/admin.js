@@ -129,12 +129,16 @@ function showError(err) {
   alert('Errore: ' + (err.message || err));
 }
 
+let pendingRequests = 0;        // richieste in attesa (badge)
+let bkFilterTouched = false;    // l'utente ha scelto il filtro a mano
+
 async function refreshBadge() {
   if (!can('prenotazioni')) return;
   const [req, unread] = await Promise.all([
     sb.from('bookings').select('id', { count: 'exact', head: true }).eq('status', 'richiesta'),
     sb.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null),
   ]);
+  pendingRequests = req.count || 0;
   for (const [id, count] of [['req-badge', req.count], ['msg-badge', unread.count]]) {
     $(id).hidden = !count;
     $(id).textContent = count || '';
@@ -401,6 +405,8 @@ function afterBookingChange() {
 // Elenco prenotazioni
 // =====================================================================
 async function renderBookingList() {
+  // se ci sono richieste in attesa si parte da "Da gestire", finché l'utente non sceglie altro
+  if (!bkFilterTouched && pendingRequests) $('bk-filter').value = 'richieste';
   const filter = $('bk-filter').value;
   const t = today();
   let q = sb.from('bookings').select('*');
@@ -412,7 +418,14 @@ async function renderBookingList() {
   if (error) throw error;
 
   const el = $('bk-list');
-  if (!data.length) { el.innerHTML = '<p class="muted">Nessuna prenotazione.</p>'; return; }
+  if (!data.length) {
+    el.innerHTML = '<p class="muted">Nessuna prenotazione.</p>' + (filter !== 'richieste' && pendingRequests
+      ? `<p class="bk-hint">${pendingRequests === 1 ? 'C’è 1 richiesta' : `Ci sono ${pendingRequests} richieste`} da gestire.
+          <button type="button" class="btn small" id="bk-show-req">Mostra</button></p>` : '');
+    const show = $('bk-show-req');
+    if (show) show.onclick = () => { $('bk-filter').value = 'richieste'; renderBookingList().catch(showError); };
+    return;
+  }
   el.innerHTML = `<table class="bk-table">
     <thead><tr><th>Date</th><th>Alloggio</th><th>Cliente</th><th>Canale</th><th>Note</th><th>Pagamento</th><th>Stato</th><th></th></tr></thead>
     <tbody>${data.map(b => {
@@ -443,7 +456,7 @@ function paymentCell(b) {
     (label[b.payment_status] ? `<br><span class="paid ${b.payment_status}">${label[b.payment_status]}</span>` : '');
 }
 
-$('bk-filter').onchange = () => renderBookingList().catch(showError);
+$('bk-filter').onchange = () => { bkFilterTouched = true; renderBookingList().catch(showError); };
 $('bk-list').addEventListener('click', async e => {
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
