@@ -321,7 +321,7 @@ export function createClient() {
           const list = db.mfa[session?.user.id] ? [{ id: 'f-' + session.user.id, factor_type: 'totp', status: 'verified' }] : [];
           return { data: { totp: list, all: list }, error: null };
         },
-        enroll: async () => ({ data: { id: 'f-' + session.user.id, type: 'totp',
+        enroll: async ({ issuer }) => ({ data: { id: 'f-' + session.user.id, type: 'totp', issuer,
           totp: { qr_code: DEMO_QR, secret: 'DEMO DEMO DEMO DEMO' } }, error: null }),
         unenroll: async () => ({ data: {}, error: null }),
         challengeAndVerify: async ({ code }) => {

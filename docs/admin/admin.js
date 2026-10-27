@@ -1213,6 +1213,14 @@ const MFA_ERRORS = {
   over_request_rate_limit: 'Troppi tentativi: aspetta qualche minuto e riprova.',
 };
 
+// nome con cui l'account compare nell'app di autenticazione: il nome della struttura ("Titolo del sito")
+async function mfaIssuer() {
+  const { data } = await sb.from('site_content').select('value').eq('key', 'titolo').maybeSingle();
+  // i due punti separano emittente e account nel codice QR: non possono stare nel nome
+  const name = (data?.value ?? '').replace(/:/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return name || 'Area riservata';
+}
+
 // true se l'accesso ha già il secondo passaggio; altrimenti mostra la maschera per farlo
 async function mfaReady() {
   const { data: aal, error } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -1233,7 +1241,9 @@ async function mfaReady() {
   } else {
     // primo accesso (o verifica azzerata): si eliminano le configurazioni lasciate a metà e se ne crea una nuova
     for (const f of factors.all.filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
-    const { data: enrolled, error: eErr } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Area riservata' });
+    const issuer = await mfaIssuer();
+    const { data: enrolled, error: eErr } = await sb.auth.mfa.enroll({ factorType: 'totp', issuer, friendlyName: 'Area riservata' });
+    $('mfa-issuer').textContent = issuer;
     if (eErr) throw eErr;
     mfaFactorId = enrolled.id;
     $('mfa-qr').src = enrolled.totp.qr_code;
