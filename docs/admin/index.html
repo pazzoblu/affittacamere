@@ -30,22 +30,68 @@
   <div id="mfa-view" class="login" hidden>
     <form id="mfa-form" class="card">
       <h1 id="mfa-title">Verifica in due passaggi</h1>
-      <div id="mfa-setup" hidden>
-        <p class="small">Per proteggere i dati degli ospiti, oltre alla password serve un codice dal telefono.</p>
-        <ol class="small mfa-steps">
-          <li>Installa sul telefono un'app di autenticazione, ad esempio <strong>Google Authenticator</strong> o <strong>Microsoft Authenticator</strong>.</li>
-          <li>Nell'app scegli "aggiungi account" e inquadra questo codice QR:</li>
-        </ol>
+      <div id="mfa-setup" class="mfa-guide" hidden>
+        <p class="small">Per proteggere i dati degli ospiti, oltre alla password serve un <strong>codice di 6 cifre</strong>
+          che genera un'app sul tuo telefono. Si configura una volta sola e ci vogliono un paio di minuti.</p>
+
+        <h2 class="mfa-step"><span>1</span> Installa l'app sul telefono</h2>
+        <p class="small">È gratuita. Se ne hai già una, usa quella. Altrimenti scegline una:</p>
+        <ul class="small mfa-apps">
+          <li><strong>Google Authenticator</strong>:
+            <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" target="_blank" rel="noopener">Android</a> ·
+            <a href="https://apps.apple.com/it/app/google-authenticator/id388497605" target="_blank" rel="noopener">iPhone</a></li>
+          <li><strong>Microsoft Authenticator</strong>:
+            <a href="https://play.google.com/store/apps/details?id=com.azure.authenticator" target="_blank" rel="noopener">Android</a> ·
+            <a href="https://apps.apple.com/it/app/microsoft-authenticator/id983156458" target="_blank" rel="noopener">iPhone</a></li>
+        </ul>
+
+        <h2 class="mfa-step"><span>2</span> Inquadra questo codice QR con l'app</h2>
         <img id="mfa-qr" class="mfa-qr" alt="Codice QR da inquadrare con l'app di autenticazione" width="180" height="180">
-        <p class="small muted">Non riesci a inquadrarlo? Nell'app scegli "inserisci una chiave" e scrivi:<br>
-          <code id="mfa-secret" class="mfa-secret"></code></p>
-        <p class="small">3. Scrivi qui sotto il codice di 6 cifre che compare nell'app.</p>
+        <details class="small mfa-help">
+          <summary>Come si fa con Google Authenticator</summary>
+          <ol>
+            <li>Apri l'app e tocca <strong>+</strong> (in basso a destra).</li>
+            <li>Scegli <strong>Scansiona un codice QR</strong> e inquadra il codice qui sopra.</li>
+            <li>Nell'elenco compare il nuovo account con un codice di 6 cifre.</li>
+          </ol>
+        </details>
+        <details class="small mfa-help">
+          <summary>Come si fa con Microsoft Authenticator</summary>
+          <ol>
+            <li>Apri l'app e tocca <strong>+</strong> (in alto a destra).</li>
+            <li>Scegli <strong>Altro account (Google, Facebook e così via)</strong>.</li>
+            <li>Inquadra il codice qui sopra: nell'elenco compare il nuovo account con un codice di 6 cifre.</li>
+          </ol>
+        </details>
+        <details class="small mfa-help">
+          <summary>Stai usando proprio il telefono e non puoi inquadrare il codice?</summary>
+          <ol>
+            <li>Nell'app tocca <strong>+</strong> e scegli <strong>Inserisci una chiave di configurazione</strong>
+              (in Microsoft Authenticator: <strong>Altro account</strong> → <strong>Immetti il codice manualmente</strong>).</li>
+            <li>Come nome scrivi <strong>Area riservata</strong>; come chiave copia questa:<br>
+              <code id="mfa-secret" class="mfa-secret"></code></li>
+            <li>Se l'app lo chiede, scegli <strong>Basato sull'ora</strong>.</li>
+          </ol>
+        </details>
+
+        <h2 class="mfa-step"><span>3</span> Scrivi qui il codice che vedi nell'app</h2>
+        <p class="small">Il codice cambia ogni 30 secondi: va bene quello che vedi in quel momento.</p>
       </div>
       <p id="mfa-ask" class="small" hidden>Apri l'app di autenticazione sul telefono e scrivi il codice di 6 cifre dell'area riservata.</p>
       <label>Codice<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required
         title="Il codice di 6 cifre dell'app"></label>
       <button class="btn" type="submit">Verifica</button>
       <div id="mfa-msg"></div>
+      <details class="small mfa-help" id="mfa-trouble" hidden>
+        <summary>Il codice non viene accettato?</summary>
+        <ul>
+          <li>Controlla che sul telefono data e ora siano <strong>automatiche</strong> (Impostazioni → Data e ora): se l'orologio è sbagliato anche di poco, il codice non vale.</li>
+          <li>Se hai ricaricato questa pagina, il codice QR è cambiato: elimina dall'app l'account aggiunto prima e inquadra di nuovo quello qui sopra.</li>
+          <li>Scrivi il codice appena compare, prima che l'app lo cambi.</li>
+        </ul>
+      </details>
+      <p class="small muted" id="mfa-done-note" hidden>Da ora in poi, a ogni accesso, dopo la password ti verrà chiesto il codice dell'app.
+        Non eliminare l'account dall'app: se cambi telefono, chiedi a un amministratore di azzerare la verifica.</p>
       <p class="small muted" id="mfa-lost" hidden>Hai perso o cambiato telefono? Chiedi a un amministratore di azzerare la tua verifica dalla scheda Utenti.</p>
       <p class="small"><button type="button" class="link" id="mfa-logout">Esci</button></p>
     </form>

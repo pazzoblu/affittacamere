@@ -1241,6 +1241,9 @@ async function mfaReady() {
     $('mfa-title').textContent = 'Attiva la verifica in due passaggi';
   }
   $('mfa-setup').hidden = !!verified;
+  $('mfa-trouble').hidden = !!verified;
+  $('mfa-done-note').hidden = !!verified;
+  $('mfa-view').classList.toggle('setup', !verified);
   $('mfa-ask').hidden = !verified;
   $('mfa-lost').hidden = !verified;
   showView('mfa-view');
