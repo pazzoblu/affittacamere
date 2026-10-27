@@ -313,3 +313,8 @@ dialog::backdrop { background: rgba(30, 20, 10, .45); }
 
 /* avviso richieste nascoste dal filtro */
 .bk-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--surface); border-left: 4px solid var(--accent); padding: 10px 14px; border-radius: var(--radius); }
+
+/* verifica in due passaggi */
+.mfa-steps { padding-left: 20px; margin: 8px 0; }
+.mfa-qr { display: block; margin: 8px auto; background: #fff; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.mfa-secret { word-break: break-all; user-select: all; }

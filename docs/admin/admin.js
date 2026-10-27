@@ -34,7 +34,7 @@ function msg(el, text, kind = 'err') {
 document.querySelectorAll('dialog [data-close]').forEach(b => { b.onclick = () => b.closest('dialog').close(); });
 
 function showView(id) {
-  for (const v of ['login-view', 'msg-view', 'app-view']) $(v).hidden = v !== id;
+  for (const v of ['login-view', 'msg-view', 'mfa-view', 'app-view']) $(v).hidden = v !== id;
 }
 
 function slugify(s) {
@@ -1026,7 +1026,8 @@ async function renderUsers() {
     <tbody>${users.map(u => `<tr>
       <td data-label="Utente">${u.name ? `<strong>${esc(u.name)}</strong><br>` : ''}<span class="small">${esc(u.email)}</span>
         ${u.id === me.id ? ' <span class="muted small">(tu)</span>' : ''}
-        ${u.pending ? '<br><span class="paid in_attesa">non ha ancora attivato l\'accesso</span>' : ''}</td>
+        ${u.pending ? '<br><span class="paid in_attesa">non ha ancora attivato l\'accesso</span>' : ''}
+        <br><span class="small ${u.mfa ? 'muted' : ''}">${u.mfa ? 'Verifica in due passaggi attiva' : 'Verifica in due passaggi da configurare al prossimo accesso'}</span></td>
       <td data-label="Ruoli">${u.roles.length ? u.roles.map(r => `<span class="role-chip ${r}">${ROLE_LABEL[r]}</span>`).join(' ')
         : '<span class="muted small">nessun ruolo: non può entrare</span>'}</td>
       <td class="small" data-label="Ultimo accesso">${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai'}</td>
@@ -1035,6 +1036,8 @@ async function renderUsers() {
         ${u.id === me.id ? '' : `<button class="btn small ghost" data-user="link" data-id="${u.id}"
           title="Crea un nuovo link con cui l'utente sceglie la password">${u.pending ? 'Nuovo link di attivazione' : 'Link nuova password'}</button>`}
         <button class="btn small ghost" data-user="password" data-id="${u.id}" title="Imposta tu una password">Password</button>
+        ${u.id === me.id || !u.mfa ? '' : `<button class="btn small ghost" data-user="mfa" data-id="${u.id}"
+          title="Per chi ha perso o cambiato telefono: al prossimo accesso configurerà di nuovo l'app">Azzera verifica</button>`}
         ${u.id === me.id ? '' : `<button class="btn small danger ghost" data-user="delete" data-id="${u.id}">Elimina</button>`}
       </td></tr>`).join('')}</tbody></table>`;
 }
@@ -1132,6 +1135,17 @@ $('user-list').addEventListener('click', async e => {
     btn.disabled = false;
     return;
   }
+  if (btn.dataset.user === 'mfa') {
+    if (!confirm(`Azzerare la verifica in due passaggi di ${user.email}?\nAl prossimo accesso dovrà configurare di nuovo l'app di autenticazione sul telefono.`)) return;
+    try {
+      await callUsers({ action: 'reset_mfa', user_id: user.id });
+    } catch (err) {
+      return msg($('user-msg'), err.message);
+    }
+    await renderUsers().catch(showError);
+    msg($('user-msg'), `Verifica azzerata: al prossimo accesso ${user.email} configurerà di nuovo l'app.`, 'ok');
+    return;
+  }
   if (btn.dataset.user !== 'delete') return openUserDialog(btn.dataset.user, user);
   if (!confirm(`Eliminare l'utente ${user.email}? Non potrà più entrare nell'area riservata.`)) return;
   try {
@@ -1187,13 +1201,93 @@ $('forgot').onclick = async () => {
   msg($('login-msg'), 'Se l\'email è registrata, a breve riceverai un link per scegliere una nuova password.', 'ok');
 };
 
+// ---------------------------------------------------------------------
+// Verifica in due passaggi (codice TOTP da un'app sul telefono).
+// Senza, il database non mostra nessun dato: vedi mfa_ok() in schema.sql.
+// ---------------------------------------------------------------------
+let mfaFactorId = null;
+
+const MFA_ERRORS = {
+  mfa_verification_failed: 'Codice errato o scaduto: controlla l\'app e riprova.',
+  mfa_challenge_expired: 'Tempo scaduto: scrivi il codice che compare ora nell\'app.',
+  over_request_rate_limit: 'Troppi tentativi: aspetta qualche minuto e riprova.',
+};
+
+// true se l'accesso ha già il secondo passaggio; altrimenti mostra la maschera per farlo
+async function mfaReady() {
+  const { data: aal, error } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error) throw error;
+  if (aal.currentLevel === 'aal2') return true;
+  // maschera già aperta (es. rinnovo automatico del token): non si rigenera il codice QR mentre lo si inquadra
+  if (!$('mfa-view').hidden) return false;
+
+  const form = $('mfa-form');
+  form.reset();
+  msg($('mfa-msg'), '');
+  const { data: factors, error: fErr } = await sb.auth.mfa.listFactors();
+  if (fErr) throw fErr;
+  const verified = factors.totp.find(f => f.status === 'verified');
+  if (verified) {
+    mfaFactorId = verified.id;
+    $('mfa-title').textContent = 'Codice di verifica';
+  } else {
+    // primo accesso (o verifica azzerata): si eliminano le configurazioni lasciate a metà e se ne crea una nuova
+    for (const f of factors.all.filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: f.id });
+    const { data: enrolled, error: eErr } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Area riservata' });
+    if (eErr) throw eErr;
+    mfaFactorId = enrolled.id;
+    $('mfa-qr').src = enrolled.totp.qr_code;
+    $('mfa-secret').textContent = enrolled.totp.secret;
+    $('mfa-title').textContent = 'Attiva la verifica in due passaggi';
+  }
+  $('mfa-setup').hidden = !!verified;
+  $('mfa-ask').hidden = !verified;
+  $('mfa-lost').hidden = !verified;
+  showView('mfa-view');
+  form.code.focus();
+  return false;
+}
+
+$('mfa-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  btn.disabled = true;
+  touchActivity(true);
+  const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: mfaFactorId, code: e.target.code.value.trim() });
+  btn.disabled = false;
+  if (error) {
+    e.target.code.select();
+    return msg($('mfa-msg'), MFA_ERRORS[error.code] ?? error.message);
+  }
+  // il token ora è "aal2": si entra
+  const { data } = await sb.auth.getSession();
+  onSession(data.session).catch(showError);
+});
+$('mfa-logout').onclick = () => sb.auth.signOut();
+
 let started = false;
+let starting = false;
+let pendingPasswordMode = null; // dopo un link di invito o di recupero: la password si sceglie appena entrati
 async function onSession(session) {
   if (!session) { started = false; showView('login-view'); return; }
-  if (started) return;
-  // sessione rimasta salvata nel browser (es. dal giorno prima) ma inattiva da più di 30 minuti
-  if (sessionExpired()) { await expireSession(); return; }
-  touchActivity(true);
+  if (started || starting) return;
+  starting = true;
+  try {
+    // sessione rimasta salvata nel browser (es. dal giorno prima) ma inattiva da più di 30 minuti
+    if (sessionExpired()) { await expireSession(); return; }
+    touchActivity(true);
+    if (!(await mfaReady())) return;
+    await startApp(session);
+  } finally {
+    starting = false;
+  }
+  if (started && pendingPasswordMode) {
+    openPasswordDialog(pendingPasswordMode);
+    pendingPasswordMode = null;
+  }
+}
+
+async function startApp(session) {
   const { data: staff, error } = await sb.from('staff').select('name, roles').eq('user_id', session.user.id).maybeSingle();
   if (error || !staff?.roles?.length) {
     $('msg-card').innerHTML = `<h1>Accesso non autorizzato</h1>
@@ -1232,14 +1326,14 @@ if (!configured) {
     // arrivo da un link email (invito o nuova password): è un accesso appena fatto
     if (session && window.__authLinkType) touchActivity(true);
     setTimeout(() => {
-      onSession(session).catch(showError);
       const invited = session && window.__authLinkType === 'invite';
       if (event === 'PASSWORD_RECOVERY' || invited) {
-        // toglie il token dalla barra degli indirizzi e chiede subito la password
+        // toglie il token dalla barra degli indirizzi; la password si chiede dopo la verifica in due passaggi
         window.__authLinkType = '';
         history.replaceState(null, '', location.pathname);
-        openPasswordDialog(invited ? 'invite' : 'recovery');
+        pendingPasswordMode = invited ? 'invite' : 'recovery';
       }
+      onSession(session).catch(showError);
     }, 0);
   });
 }

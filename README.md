@@ -42,6 +42,7 @@ node tests/dev/server.mjs
 
 Apri http://localhost:8080. Area riservata: http://localhost:8080/admin/ con una qualsiasi password e una di queste email,
 per provare i diversi ruoli: `admin@demo.test`, `camere@demo.test`, `prenotazioni@demo.test`, `prezzi@demo.test`.
+La verifica in due passaggi è simulata: il codice giusto è sempre `123456`.
 Per "La mia prenotazione" c'è la prenotazione demo `DEMO2345` con email `cliente@example.com`.
 In demo i pagamenti sono simulati: "Paga e prenota" conferma subito senza passare da Stripe.
 I dati demo restano nel browser; per ripartire da zero svuota il localStorage del sito.
@@ -194,9 +195,16 @@ for f in docs/js/*.js docs/admin/*.js; do node --input-type=module --check < "$f
 - **Content-Security-Policy**: ogni pagina HTML ha un `<meta http-equiv="Content-Security-Policy">`. Script solo dal
   sito stesso, collegamenti e immagini solo dal sito e da `*.supabase.co`. Niente `<script>` scritti dentro le pagine:
   se ne serve uno, va messo in un file `.js`. Se un domani servirà un servizio esterno (es. una mappa), va aggiunto lì.
+- **Verifica in due passaggi (obbligatoria)**: dopo email e password l'area riservata chiede il codice di 6 cifre
+  di un'app di autenticazione (Google Authenticator, Microsoft Authenticator...). Al primo accesso ognuno inquadra
+  il QR code. Il blocco è anche nel database: `has_role()`, `is_staff()` e `is_admin()` sono vere solo se il token
+  è di livello `aal2` (`mfa_ok()`); con la sola password si legge soltanto il proprio profilo staff. Anche le Edge
+  Functions (`users` e quelle che usano `_shared/admin.ts`) rifiutano i token senza secondo passaggio.
+  Chi perde il telefono: un altro amministratore usa "Azzera verifica" nella scheda Utenti. Se tutti gli amministratori
+  perdono il telefono: Supabase → Authentication → Users → utente → elimina il fattore MFA.
+  In Supabase (Authentication → Multi-Factor) il TOTP dev'essere attivo: lo è di default.
 
 ## Da valutare in seguito
 - Informativa privacy: `docs/privacy.html` usa i dati del titolare inseriti in "Sito e pagamenti"; è un modello da far verificare a un consulente. Se si aggiungono statistiche o pubblicità servirà anche un banner cookie.
-- Verifica in due passaggi (MFA) per gli utenti dell'area riservata.
 - Notifica email per le nuove richieste e prenotazioni pagate (oggi arriva solo l'email di Stripe del pagamento).
 - Dati ospiti per Alloggiati Web e tassa di soggiorno.

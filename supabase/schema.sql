@@ -22,21 +22,29 @@ create table if not exists staff (
   constraint staff_roles_chk check (roles <@ array['admin','camere','prenotazioni','prezzi']::text[])
 );
 
+-- Verifica in due passaggi: lo staff vede e modifica i dati solo se ha inserito anche
+-- il codice dell'app di autenticazione (livello "aal2" del token di Supabase).
+-- Con solo email e password si legge soltanto il proprio profilo staff.
+create or replace function mfa_ok() returns boolean
+language sql stable as $$
+  select coalesce(auth.jwt() ->> 'aal', '') = 'aal2';
+$$;
+
 create or replace function is_staff() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from staff where user_id = auth.uid());
+  select mfa_ok() and exists (select 1 from staff where user_id = auth.uid());
 $$;
 
 -- l'admin ha implicitamente tutti i ruoli
 create or replace function has_role(p_role text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from staff where user_id = auth.uid()
+  select mfa_ok() and exists (select 1 from staff where user_id = auth.uid()
                  and ('admin' = any(roles) or p_role = any(roles)));
 $$;
 
 create or replace function is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from staff where user_id = auth.uid() and 'admin' = any(roles));
+  select mfa_ok() and exists (select 1 from staff where user_id = auth.uid() and 'admin' = any(roles));
 $$;
 
 -- deve sempre restare almeno un amministratore

@@ -1,6 +1,7 @@
 // Gestione degli utenti dell'area riservata, solo per gli amministratori.
 // Azioni: list, create (con password o con link di attivazione), update (nome e ruoli),
-// new_link (nuovo link per scegliere la password), set_password, delete.
+// new_link (nuovo link per scegliere la password), set_password, reset_mfa (azzera la verifica
+// in due passaggi di chi ha perso il telefono), delete.
 // I link non vengono spediti da Supabase: li mostra l'area riservata e l'admin li inoltra.
 // Il database impedisce comunque di togliere l'ultimo amministratore.
 // File autosufficiente: si può pubblicare anche dall'editor della Dashboard Supabase.
@@ -34,10 +35,20 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, secretKey(), {
 const ROLES = ['admin', 'camere', 'prenotazioni', 'prezzi'];
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-// restituisce l'id dell'amministratore che chiama, oppure null
+// livello di accesso scritto nel token: "aal2" se l'utente ha inserito anche il codice della verifica in due passaggi
+function tokenAal(token: string): string {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(payload)).aal ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// restituisce l'id dell'amministratore che chiama (entrato con la verifica in due passaggi), oppure null
 async function callerAdmin(req: Request): Promise<string | null> {
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) return null;
+  if (!token || tokenAal(token) !== 'aal2') return null;
   const { data } = await db.auth.getUser(token);
   if (!data.user) return null;
   const { data: me } = await db.from('staff').select('roles').eq('user_id', data.user.id).maybeSingle();
@@ -61,6 +72,8 @@ async function list() {
     staff: byId.has(u.id),
     // ha ricevuto il link di attivazione ma non ha ancora scelto la password
     pending: !u.email_confirmed_at,
+    // ha configurato l'app per la verifica in due passaggi
+    mfa: (u.factors ?? []).some(f => f.status === 'verified'),
     last_sign_in_at: u.last_sign_in_at,
     created_at: u.created_at,
   })).sort((a, b) => (a.email ?? '').localeCompare(b.email ?? ''));
@@ -146,6 +159,19 @@ async function setPassword(body: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+// per chi ha perso o cambiato telefono: al prossimo accesso configurerà di nuovo l'app
+async function resetMfa(body: Record<string, unknown>, me: string) {
+  const id = String(body.user_id ?? '');
+  if (id === me) return json({ error: 'La tua verifica la può azzerare solo un altro amministratore' }, 400);
+  const { data, error } = await db.auth.admin.mfa.listFactors({ userId: id });
+  if (error) return json({ error: error.message }, 400);
+  for (const f of data.factors) {
+    const { error: delErr } = await db.auth.admin.mfa.deleteFactor({ id: f.id, userId: id });
+    if (delErr) return json({ error: delErr.message }, 400);
+  }
+  return json({ ok: true });
+}
+
 async function remove(body: Record<string, unknown>, me: string) {
   const id = String(body.user_id ?? '');
   if (id === me) return json({ error: 'Non puoi eliminare il tuo utente' }, 400);
@@ -171,6 +197,7 @@ Deno.serve(async req => {
       case 'update': return await update(body);
       case 'new_link': return await newLink(body);
       case 'set_password': return await setPassword(body);
+      case 'reset_mfa': return await resetMfa(body, me);
       case 'delete': return await remove(body, me);
       default: return json({ error: 'Azione sconosciuta' }, 400);
     }

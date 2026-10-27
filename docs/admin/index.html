@@ -26,6 +26,31 @@
 
   <div id="msg-view" class="login" hidden><div class="card" id="msg-card"></div></div>
 
+  <!-- Verifica in due passaggi: configurazione al primo accesso, poi codice a ogni accesso -->
+  <div id="mfa-view" class="login" hidden>
+    <form id="mfa-form" class="card">
+      <h1 id="mfa-title">Verifica in due passaggi</h1>
+      <div id="mfa-setup" hidden>
+        <p class="small">Per proteggere i dati degli ospiti, oltre alla password serve un codice dal telefono.</p>
+        <ol class="small mfa-steps">
+          <li>Installa sul telefono un'app di autenticazione, ad esempio <strong>Google Authenticator</strong> o <strong>Microsoft Authenticator</strong>.</li>
+          <li>Nell'app scegli "aggiungi account" e inquadra questo codice QR:</li>
+        </ol>
+        <img id="mfa-qr" class="mfa-qr" alt="Codice QR da inquadrare con l'app di autenticazione" width="180" height="180">
+        <p class="small muted">Non riesci a inquadrarlo? Nell'app scegli "inserisci una chiave" e scrivi:<br>
+          <code id="mfa-secret" class="mfa-secret"></code></p>
+        <p class="small">3. Scrivi qui sotto il codice di 6 cifre che compare nell'app.</p>
+      </div>
+      <p id="mfa-ask" class="small" hidden>Apri l'app di autenticazione sul telefono e scrivi il codice di 6 cifre dell'area riservata.</p>
+      <label>Codice<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required
+        title="Il codice di 6 cifre dell'app"></label>
+      <button class="btn" type="submit">Verifica</button>
+      <div id="mfa-msg"></div>
+      <p class="small muted" id="mfa-lost" hidden>Hai perso o cambiato telefono? Chiedi a un amministratore di azzerare la tua verifica dalla scheda Utenti.</p>
+      <p class="small"><button type="button" class="link" id="mfa-logout">Esci</button></p>
+    </form>
+  </div>
+
   <!-- App -->
   <div id="app-view" hidden>
     <header class="topbar">

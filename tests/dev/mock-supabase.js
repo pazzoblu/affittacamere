@@ -207,13 +207,24 @@ const withRoom = b => { const r = db.rooms.find(x => x.id === b.room_id); return
 let session = null;
 try { session = JSON.parse(sessionStorage.getItem('demo-session')); } catch { /* ignora */ }
 const listeners = [];
-const emit = () => listeners.forEach(f => f('SIGNED_IN', session));
+const emit = (event = 'SIGNED_IN') => listeners.forEach(f => f(event, session));
+const saveSession = () => sessionStorage.setItem('demo-session', JSON.stringify(session));
+// verifica in due passaggi simulata: il codice giusto è sempre 123456
+db.mfa ??= {};
+const DEMO_QR = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7 7">'
+  + '<path d="M0 0h3v3H0zM4 0h3v3H4zM0 4h3v3H0zM4 4h1v1H4zM6 6h1v1H6zM5 5h1v1H5z"/></svg>');
 
 function usersFunction(body) {
   const ok = data => ({ data, error: null });
   const err = message => ({ data: null, error: { message, context: { json: async () => ({ error: message }) } } });
   const admins = () => db.staff.filter(s => s.roles.includes('admin')).length;
-  if (body.action === 'list') return ok({ users: db.staff.map(s => ({ id: s.user_id, ...s, staff: true })) });
+  if (body.action === 'list') return ok({ users: db.staff.map(s => ({ id: s.user_id, ...s, staff: true, mfa: !!db.mfa[s.user_id] })) });
+  if (body.action === 'reset_mfa') {
+    if (body.user_id === session?.user.id) return err('La tua verifica la può azzerare solo un altro amministratore');
+    delete db.mfa[body.user_id];
+    save();
+    return ok({ ok: true });
+  }
   if (body.action === 'create') {
     if (db.staff.some(s => s.email === body.email)) return err('Esiste già un utente con questa email');
     if (!body.roles.length) return err('Scegli almeno un ruolo');
@@ -293,14 +304,36 @@ export function createClient() {
       onAuthStateChange: f => { listeners.push(f); setTimeout(() => f('INITIAL_SESSION', session)); },
       signInWithPassword: async ({ email }) => {
         const s = db.staff.find(x => x.email === email.trim().toLowerCase());
-        session = { user: { id: s?.user_id ?? 'demo-sconosciuto', email } };
-        sessionStorage.setItem('demo-session', JSON.stringify(session));
+        session = { user: { id: s?.user_id ?? 'demo-sconosciuto', email }, aal: 'aal1' };
+        saveSession();
         emit();
         return { error: null };
       },
       updateUser: async ({ password }) => (password === 'uguale123'
         ? { error: { code: 'same_password', message: 'same' } } : { data: {}, error: null }),
       resetPasswordForEmail: async () => ({ data: {}, error: null }),
+      getSession: async () => ({ data: { session }, error: null }),
+      mfa: {
+        getAuthenticatorAssuranceLevel: async () => ({ data: {
+          currentLevel: session?.aal === 'aal2' ? 'aal2' : 'aal1',
+          nextLevel: db.mfa[session?.user.id] ? 'aal2' : 'aal1' }, error: null }),
+        listFactors: async () => {
+          const list = db.mfa[session?.user.id] ? [{ id: 'f-' + session.user.id, factor_type: 'totp', status: 'verified' }] : [];
+          return { data: { totp: list, all: list }, error: null };
+        },
+        enroll: async () => ({ data: { id: 'f-' + session.user.id, type: 'totp',
+          totp: { qr_code: DEMO_QR, secret: 'DEMO DEMO DEMO DEMO' } }, error: null }),
+        unenroll: async () => ({ data: {}, error: null }),
+        challengeAndVerify: async ({ code }) => {
+          if (code !== '123456') return { data: null, error: { code: 'mfa_verification_failed', message: 'Invalid TOTP code entered' } };
+          db.mfa[session.user.id] = true;
+          save();
+          session = { ...session, aal: 'aal2' };
+          saveSession();
+          emit('MFA_CHALLENGE_VERIFIED');
+          return { data: {}, error: null };
+        },
+      },
       signOut: async () => { session = null; sessionStorage.removeItem('demo-session'); emit(); },
     },
     storage: {
