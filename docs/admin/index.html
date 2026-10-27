@@ -2,12 +2,13 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Gestione casa vacanze</title>
   <link rel="stylesheet" href="admin.css">
   <!-- tipo di link email (invite / recovery), letto prima che Supabase ripulisca l'indirizzo -->
-  <script>window.__authLinkType = (location.hash.match(/[#&]type=(\w+)/) || [])[1] || '';</script>
+  <script src="auth-link.js"></script>
 </head>
 <body>
   <!-- Login -->

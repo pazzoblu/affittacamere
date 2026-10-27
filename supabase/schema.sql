@@ -666,6 +666,48 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------
+-- Conservazione dei dati (come scritto nell'informativa privacy).
+-- Gira ogni notte (vedi in fondo) e restituisce quante righe ha toccato.
+--  * richieste mai confermate e prenotazioni annullate senza incassi:
+--    eliminate 12 mesi dopo la partenza (e almeno 12 mesi dopo la richiesta)
+--  * messaggi e notifiche dei clienti: eliminati dopo 12 mesi
+--  * prenotazioni con incassi: dopo 10 anni dalla partenza restano solo date e importi,
+--    senza email, note e messaggi; i dettagli dei pagamenti Stripe vengono eliminati
+-- ---------------------------------------------------------------------
+create or replace function purge_personal_data()
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_deleted int;
+  v_notifications int;
+  v_anonymized int;
+begin
+  delete from bookings b
+  where b.status in ('richiesta', 'annullata')
+    and b.amount_paid = 0
+    and b.check_out < current_date - interval '12 months'
+    and b.created_at < now() - interval '12 months'
+    and not exists (select 1 from payments p where p.booking_id = b.id and p.status in ('pagato', 'rimborsato'));
+  get diagnostics v_deleted = row_count;
+
+  delete from notifications where created_at < now() - interval '12 months';
+  get diagnostics v_notifications = row_count;
+
+  delete from payments p using bookings b
+  where p.booking_id = b.id and b.check_out < current_date - interval '10 years';
+  update bookings
+  set guest_email = '', notes = '', pending_message = null
+  where check_out < current_date - interval '10 years'
+    and (guest_email <> '' or notes <> '' or pending_message is not null);
+  get diagnostics v_anonymized = row_count;
+
+  return jsonb_build_object('prenotazioni_eliminate', v_deleted,
+                            'notifiche_eliminate', v_notifications,
+                            'prenotazioni_anonimizzate', v_anonymized);
+end;
+$$;
+
 revoke execute on function quote_price(uuid, date, date) from public, anon;
 revoke execute on function quote_price_base(uuid, date, date) from public, anon, authenticated;
 revoke execute on function stay_discount(uuid, int) from public, anon, authenticated;
@@ -678,6 +720,7 @@ revoke execute on function create_online_booking(uuid, date, date, text, int, te
 revoke execute on function accepted_terms_version(boolean) from public, anon, authenticated;
 revoke execute on function register_payment(text, text) from public, anon, authenticated;
 revoke execute on function expire_payment(text) from public, anon, authenticated;
+revoke execute on function purge_personal_data() from public, anon, authenticated;
 grant execute on function room_busy_ranges(uuid, date, date) to anon, authenticated;
 grant execute on function quote_booking(uuid, date, date) to anon, authenticated;
 grant execute on function request_booking(uuid, date, date, text, int, text, boolean) to anon, authenticated;
@@ -830,3 +873,18 @@ create policy photos_bucket_admin_update on storage.objects for update
 drop policy if exists photos_bucket_admin_delete on storage.objects;
 create policy photos_bucket_admin_delete on storage.objects for delete
   using (bucket_id = 'photos' and public.has_role('camere'));
+
+-- ---------------------------------------------------------------------
+-- Pulizia notturna dei dati vecchi (alle 3:30 UTC), con pg_cron di Supabase.
+-- Per controllare: select * from cron.job_run_details order by start_time desc limit 5;
+-- ---------------------------------------------------------------------
+do $do$
+begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
+    create extension if not exists pg_cron;
+    execute $$select cron.unschedule('purge-personal-data')
+              where exists (select 1 from cron.job where jobname = 'purge-personal-data')$$;
+    execute $$select cron.schedule('purge-personal-data', '30 3 * * *', 'select public.purge_personal_data()')$$;
+  end if;
+end
+$do$;

@@ -180,8 +180,23 @@ Controllo della sintassi dei file JavaScript del sito (`node --check` da solo no
 for f in docs/js/*.js docs/admin/*.js; do node --input-type=module --check < "$f" || echo "ERRORE in $f"; done
 ```
 
+## Privacy e sicurezza
+- **Conservazione dei dati**: `schema.sql` programma con pg_cron, ogni notte alle 3:30 UTC, la funzione
+  `purge_personal_data()`. Cancella le richieste e le prenotazioni annullate senza incassi 12 mesi dopo la partenza
+  e i messaggi dopo 12 mesi. Dopo 10 anni toglie email e note dalle prenotazioni e cancella i dettagli dei pagamenti.
+  Sono le regole scritte nell'informativa: se cambi una, cambia anche l'altra.
+  Per vedere le ultime esecuzioni: `select * from cron.job_run_details order by start_time desc limit 5;`
+- **Nessun servizio esterno nel browser**: caratteri e libreria Supabase sono dentro il sito
+  (`docs/js/vendor/supabase-js-2.45.4.js`, versione 2.45.4 impacchettata con esbuild). Per aggiornarla, in una cartella
+  di lavoro: `npm i @supabase/supabase-js@<versione> esbuild`, poi
+  `npx esbuild entry.mjs --bundle --format=esm --platform=browser --target=es2020 --minify --outfile=...`,
+  con `entry.mjs` che contiene `export * from '@supabase/supabase-js';`. Infine aggiorna l'import in `docs/js/common.js`.
+- **Content-Security-Policy**: ogni pagina HTML ha un `<meta http-equiv="Content-Security-Policy">`. Script solo dal
+  sito stesso, collegamenti e immagini solo dal sito e da `*.supabase.co`. Niente `<script>` scritti dentro le pagine:
+  se ne serve uno, va messo in un file `.js`. Se un domani servirà un servizio esterno (es. una mappa), va aggiunto lì.
+
 ## Da valutare in seguito
 - Informativa privacy: `docs/privacy.html` usa i dati del titolare inseriti in "Sito e pagamenti"; è un modello da far verificare a un consulente. Se si aggiungono statistiche o pubblicità servirà anche un banner cookie.
-- Caricare i caratteri dal sito invece che da Google Fonts, per non inviare l IP dei visitatori a Google.
+- Verifica in due passaggi (MFA) per gli utenti dell'area riservata.
 - Notifica email per le nuove richieste e prenotazioni pagate (oggi arriva solo l'email di Stripe del pagamento).
 - Dati ospiti per Alloggiati Web e tassa di soggiorno.

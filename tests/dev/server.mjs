@@ -33,7 +33,7 @@ createServer(async (req, res) => {
     if (!file.startsWith(root)) throw new Error('fuori radice');
     let body = await readFile(file);
     if (path === '/js/common.js') {
-      body = body.toString().replace(/from 'https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase[^']+'/, "from '/mock-supabase.js'");
+      body = body.toString().replace(/from '\.\/vendor\/supabase-js[^']+'/, "from '/mock-supabase.js'");
     }
     res.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'application/octet-stream' });
     res.end(body);
